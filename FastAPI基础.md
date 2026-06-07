@@ -128,6 +128,7 @@ def read_items(
 ```
 ---
 三、请求体参数
+---
 请求体参数通过Http请求体传递，通常使用JSON格式，需要定义Pydantic模型。
 ```python
 from fastapi import FastAPI
@@ -207,8 +208,12 @@ class Item(BaseModel):
 def create_item(item: Item):
     return item
 ```
+## 四、请求与响应
+```html
+客户端请求 → FastAPI 路由匹配 → 参数解析 → 业务处理 → 返回响应 → 客户端接收
+```
 
-
+## 五、Response（响应）
 
 
 
