@@ -214,7 +214,18 @@ def create_item(item: Item):
 ```
 
 ## 五、Response（响应）
+**FastAPI内置响应类型**
+FastAPI默认响应类型是`JSONReponse`。如果需要返会非JSON数据（如HTML、文件流），FastAPI提供了丰富的响应类型：
 
+| 响应类型 | 说明 |
+| :--- | :--- |
+| `JSONResponse` | JSON 格式响应（默认） |
+| `HTMLResponse` | HTML 格式响应 |
+| `PlainTextResponse` | 纯文本响应 |
+| `RedirectResponse` | 重定向响应 |
+| `StreamingResponse` | 流式响应（文件下载） |
+| `FileResponse` | 文件响应 |
+| `ORJSONResponse` | 高性能 JSON 响应 |
 
 
 
