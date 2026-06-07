@@ -38,7 +38,9 @@ uvicorn main:app --reload
 >
 >​	http://127.0.0.1:8000/docs
 
-![截屏2026-06-07 00.15.24](../../../../截屏2026-06-07 00.15.24.png)
+<img width="779" height="434" alt="截屏2026-06-07 00 15 24" src="https://github.com/user-attachments/assets/42a93377-f561-40c1-b4d4-ab4133f482a7" />
+
+
 
 ##二、Request(请求参数)
 
