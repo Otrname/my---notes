@@ -75,6 +75,7 @@ def read_item(
     return {"item_id": item_id}
 ```
 
+<img width="779" height="434" alt="截屏2026-06-07 00 15 24" src="https://github.com/user-attachments/assets/c2e86f85-2340-4a4a-b110-a7fedb300929" />
 
 
 **常用参数**
@@ -217,4 +218,4 @@ def create_item(item: Item):
 
 
 
-![截屏2026-06-07 00.15.24](../../../../截屏2026-06-07 00.15.24.png)
+
