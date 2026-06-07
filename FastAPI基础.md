@@ -227,6 +227,119 @@ FastAPI默认响应类型是`JSONReponse`。如果需要返会非JSON数据（�
 | `FileResponse` | 文件响应 |
 | `ORJSONResponse` | 高性能 JSON 响应 |
 
+响应类型设置
+```python
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse, HTMLResponse
+
+app = FastAPI()
+
+@app.get("/json")
+def get_json():
+    return JSONResponse(content={"message": "Hello"})
+
+@app.get("/html", response_class=HTMLResponse)
+def get_html():
+    return "<h1>Hello, World!</h1>"
+```
+示例： 响应`HTML`格式
+```python
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse
+
+app = FastAPI()
+
+@app.get("/", response_class=HTMLResponse)
+async def read_root():
+    html_content = """
+    <html>
+        <head>
+            <title>FastAPI</title>
+        </head>
+        <body>
+            <h1>Hello, FastAPI!</h1>
+        </body>
+    </html>
+    """
+    return html_content
+```
+示例：响应文件格式
+```python
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+
+app = FastAPI()
+
+@app.get("/download")
+async def download_file():
+    return FileResponse(
+        path="file.pdf",
+        filename="download.pdf",
+        media_type="application/pdf"
+    )
+```
+---
+自定义响应(自己写个类）
+```python
+from fastapi import FastAPI, Response
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+class CustomResponse(JSONResponse):
+    def render(self, content):
+        # 自定义响应头
+        self.headers["X-Custom-Header"] = "CustomValue"
+        return super().render(content)
+
+@app.get("/custom", response_class=CustomResponse)
+def get_custom():
+    return {"message": "Custom Response"}
+```
+异常处理
+使用`HTTPExcption`抛出异常响应
+```python
+from fastapi import FastAPI, HTTPException
+
+app = FastAPI()
+
+items = {"foo": "The Foo Wrestlers"}
+
+@app.get("/items/{item_id}")
+def read_item(item_id: str):
+    if item_id not in items:
+        raise HTTPException(
+            status_code=404,
+            detail="Item not found",
+            headers={"X-Error": "There goes my error"}
+        )
+    return {"item": items[item_id]}
+```
+自定义异常处理器：
+```python
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+class UnicornException(Exception):
+    def __init__(self, name: str):
+        self.name = name
+
+@app.exception_handler(UnicornException)
+async def unicorn_exception_handler(request: Request, exc: UnicornException):
+    return JSONResponse(
+        status_code=418,
+        content={"message": f"Oops! {exc.name} did something. There goes a rainbow..."}
+    )
+
+@app.get("/unicorns/{name}")
+def read_unicorn(name: str):
+    if name == "yolo":
+        raise UnicornException(name=name)
+    return {"unicorn_name": name}
+```
+
 
 
 
