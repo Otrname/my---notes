@@ -109,8 +109,101 @@ GET /items/?skip=0&limit=10
 ```
 
 查询参数 - 类型注解**Query**
+使用`Query`进行类型注解和参数约束，用法与`Path`一样：
+```python
+from fastapi import FastAPI, Query
 
+app = FastAPI()
 
+@app.get("/items/")
+def read_items(
+    q: str = Query(None, min_length=3, max_length=50),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, le=100)
+):
+    return {"q": q, "skip": skip, "limit": limit}
+```
+---
+三、请求体参数
+请求体参数通过Http请求体传递，通常使用JSON格式，需要定义Pydantic模型。
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class Item(BaseModel):
+    name: str
+    description: str = None
+    price: float
+    tax: float = None
+
+@app.post("/items/")
+def create_item(item: Item):
+    return item
+```
+**示例**
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class Item(BaseModel):
+    name: str
+    description: str = None
+    price: float
+    tax: float = None
+
+@app.post("/items/")
+async def create_item(item: Item):
+    """
+    创建物品
+    """
+    item_dict = item.dict()
+    if item.tax:
+        price_with_tax = item.price + item.tax
+        item_dict.update({"price_with_tax": price_with_tax})
+    return item_dict
+```
+**示例请求：**
+```python
+POST /items/
+{
+    "name": "商品名称",
+    "description": "商品描述",
+    "price": 99.99,
+    "tax": 10.0
+}
+```
+请求体参数-类型注解Field
+使用`Field`对请求体参数进行约束和验证：
+```python
+from fastapi import FastAPI
+from pydantic import BaseModel, Field
+
+app = FastAPI()
+
+class Item(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    description: str = Field(None, max_length=300)
+    price: float = Field(..., gt=0, description="价格必须大于0")
+    tax: float = Field(None, ge=0)
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "name": "商品名称",
+                "description": "商品描述",
+                "price": 99.99,
+                "tax": 10.0
+            }
+        }
+
+@app.post("/items/")
+def create_item(item: Item):
+    return item
+```
 
 
 
