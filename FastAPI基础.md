@@ -42,9 +42,9 @@ uvicorn main:app --reload
 
 
 
-##二、Request(请求参数)
+## 二、Request(请求参数)
 
-###1.路径参数
+### 1.路径参数
 
 路径参数通过URL路径传递，在函数参数中直接定义即可。
 
