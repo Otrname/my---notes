@@ -3587,7 +3587,8 @@ async def update_item(
 
 当把 `openapi_examples` 添加到 `Body()` 后，`/docs` 会如下所示：
 
-![截屏2026-06-11 12.32.20](images/截屏2026-06-11 12.32.20.png)
+
+<img width="1350" height="776" alt="截屏2026-06-11 12 32 20" src="https://github.com/user-attachments/assets/880e4f68-34b0-446a-9a35-aff7fc63555d" />
 
 
 
