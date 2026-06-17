@@ -7322,8 +7322,8 @@ async def read_users(commons: Annotated[dict, Depends(common_parameters)]):
 ```mermaid
 graph TD
     %% 1. 定义节点关系
-    A(common_parameters) --> B[/items/]
-    A --> C[/users/]
+    A("common_parameters") --> B["common_parameters"]
+    A --> C["/users/"]
 
 
 ```
@@ -7479,13 +7479,13 @@ async def read_users(commons: CommonsDep):
 ```mermaid
 graph TD
     %% 1. 定义节点关系
-    A[current_user] --> B[active_user]
-    A --> C[/items/public]
-    B --> D[admin_user]
-    B --> E(paying_user)
-    B --> F(/items/private/)
+    A["current_user"] --> B["active_user"]
+    A --> C["/items/public"]
+    B --> D["admin_user"]
+    B --> E("paying_user")
+    B --> F("/items/private/")
     D --> G["/users/{user_id}/active"]
-    E --> H[/items/pro/]
+    E --> H["/items/pro/"]
 
 ```
 
@@ -7902,7 +7902,7 @@ async def read_query(
 ```mermaid
 graph TD
 	A(query_extractor) --> B(query_or_Cookie_extractor)
-	B --> C(/items/)
+	B --> C("/items/")
 ```
 
 ### 多次使用同一个依赖项
