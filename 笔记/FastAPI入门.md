@@ -270,7 +270,7 @@ async def read_item(item_id: int):
 
 访问 <http://127.0.0.1:8000/docs>，查看自动生成的交互式 API 文档：
 
-![截屏2026-06-08 19.19.13](images/截屏2026-06-08 19.19.13.png)
+![截屏2026-06-08 19.19.13](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-08%2019.19.13.png)
 
  **基于标准的好处，备选文档**
 
@@ -280,7 +280,7 @@ async def read_item(item_id: int):
 
 因此，**FastAPI** 还内置了 ReDoc 生成的备选 API 文档，可在此查看 <http://127.0.0.1:8000/redoc>：
 
-![截屏2026-06-08 19.19.13](images/截屏2026-06-08 19.19.13-0923532.png)
+![截屏2026-06-08 19.19.13-0923532](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-08%2019.19.13-0923532.png)
 
 同样，还有很多兼容工具，包括多种语言的代码生成工具。
 
@@ -434,7 +434,7 @@ async def get_model(model_name: ModelName):
 
 API 文档会显示预定义路径参数的可用值：
 
-![截屏2026-06-08 20.06.47](images/截屏2026-06-08 20.06.47.png)
+![截屏2026-06-08 20.06.47](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-08%2020.06.47.png)
 
 ### 使用 Python 枚举
 
@@ -1096,7 +1096,7 @@ async def create_item(item: Item):
 
 在编辑器中，函数内部你会在各处得到类型提示与补全（如果接收的不是 Pydantic 模型，而是 `dict`，就不会有这样的支持），还支持检查错误的类型操作。
 
-![截屏2026-06-10 10.54.28](images/截屏2026-06-10 10.54.28.png)
+![截屏2026-06-10 10.54.28](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-10%2010.54.28.png)
 
 这并非偶然，整个框架都是围绕这种设计构建的。
 
@@ -1569,7 +1569,7 @@ http://localhost:8000/items/?q=foo&q=bar
 
 交互式 API 文档会相应更新，以支持多个值：
 
-![截屏2026-06-10 16.12.27](images/截屏2026-06-10 16.12.27.png)
+![截屏2026-06-10 16.12.27](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-10%2016.12.27.png)
 
 #### 具有默认值的查询参数列表 / 多个值
 
@@ -1768,7 +1768,7 @@ async def read_items(
 
 文档将会像下面这样展示它：
 
-![截屏2026-06-10 16.43.21](images/截屏2026-06-10 16.43.21.png)
+![截屏2026-06-10 16.43.21](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-10%2016.43.21.png)
 
 ### 从 OpenAPI 中排除参数
 
@@ -2190,7 +2190,7 @@ async def read_items(filter_query: Annotated[FilterParams, Query()]):
 
 你可以在 `/docs` 页面的 UI 中查看查询参数：
 
-![截屏2026-06-10 21.16.08](images/截屏2026-06-10 21.16.08.png)
+![截屏2026-06-10 21.16.08](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-10%2021.16.08.png)
 
 
 
@@ -3168,7 +3168,7 @@ async def create_multiple_images(images: list[Image]):
 
 
 
-![截屏2026-06-11 11.49.28](images/截屏2026-06-11 11.49.28.png)
+![截屏2026-06-11 11.49.28](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2011.49.28.png)
 
 
 
@@ -3407,7 +3407,7 @@ async def update_item(
 
 使用上述任一方法，在 `/docs` 中看起来会是这样：
 
-![截屏2026-06-11 12.18.32](images/截屏2026-06-11 12.18.32.png)
+![截屏2026-06-11 12.18.32](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2012.18.32.png)
 
 
 
@@ -3587,8 +3587,7 @@ async def update_item(
 
 当把 `openapi_examples` 添加到 `Body()` 后，`/docs` 会如下所示：
 
-
-<img width="1350" height="776" alt="截屏2026-06-11 12 32 20" src="https://github.com/user-attachments/assets/880e4f68-34b0-446a-9a35-aff7fc63555d" />
+![截屏2026-06-11 12.32.20](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2012.32.20.png)
 
 
 
@@ -3995,7 +3994,7 @@ async def read_items(cookies: Annotated[Cookies, Cookie()]):
 
 您可以在文档 UI 的 `/docs` 中查看定义的 cookie：
 
-![截屏2026-06-11 18.29.00](images/截屏2026-06-11 18.29.00.png)
+![截屏2026-06-11 18.29.00](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2018.29.00.png)
 
 > 📒 `information`
 >
@@ -4132,7 +4131,7 @@ async def read_items(headers: Annotated[CommonHeaders, Header()]):
 
 
 
-![截屏2026-06-11 19.54.50](images/截屏2026-06-11 19.54.50.png)
+![截屏2026-06-11 19.54.50](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2019.54.50.png)
 
 
 
@@ -4550,11 +4549,11 @@ FastAPI 在内部配合 Pydantic 做了多项处理，确保不会把类继承�
 
 当你查看自动文档时，你会看到输入模型和输出模型都会有各自的 JSON Schema：
 
-![截屏2026-06-11 23.55.54](images/截屏2026-06-11 23.55.54.png)
+![截屏2026-06-11 23.55.54](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2023.55.54.png)
 
 并且两个模型都会用于交互式 API 文档：
 
-![截屏2026-06-11 23.59.06](images/截屏2026-06-11 23.59.06.png)
+![截屏2026-06-11 23.59.06](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-11%2023.59.06.png)
 
 
 
@@ -5376,7 +5375,7 @@ async def create_item(name: str):
 - 在响应中返回状态码
 - 在 OpenAPI 概图（及用户界面）中存档：
 
-![截屏2026-06-12 16.27.13](images/截屏2026-06-12 16.27.13.png)
+![截屏2026-06-12 16.27.13](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-12%2016.27.13.png)
 
 > 📝
 >
@@ -5473,7 +5472,7 @@ async def create_item(name: str):
 
 这只是一种快捷方式，具有相同的数字代码，但它可以使用编辑器的自动补全功能：
 
-![截屏2026-06-12 16.43.05](images/截屏2026-06-12 16.43.05.png)
+![截屏2026-06-12 16.43.05](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-12%2016.43.05.png)
 
 ### 更改默认状态码
 
@@ -5592,7 +5591,7 @@ async def login(data: Annotated[FormData, Form()]):
 
 你可以在文档 UI 中验证它，地址为 `/docs`：
 
-![截屏2026-06-12 17.13.21](images/截屏2026-06-12 17.13.21.png)
+![截屏2026-06-12 17.13.21](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-12%2017.13.21.png)
 
 
 
@@ -6621,7 +6620,7 @@ OpenAPI 概图会自动添加标签，供 API 文档接口使用：
 
 
 
-![截屏2026-06-13 11.53.18](images/截屏2026-06-13 11.53.18.png)
+![截屏2026-06-13 11.53.18](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-13%2011.53.18.png)
 
 #### 使用 Enum 的标签
 
@@ -6694,7 +6693,7 @@ async def create_item(item: Item) -> Item:
 
 OpenAPI 概图:
 
-![截屏2026-06-13 12.03.37](images/截屏2026-06-13 12.03.37.png)
+![截屏2026-06-13 12.03.37](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-13%2012.03.37.png)
 
 
 
@@ -6743,7 +6742,7 @@ async def create_item(item: Item) -> Item:
 
 
 
-![截屏2026-06-13 12.08.36](images/截屏2026-06-13 12.08.36.png)
+![截屏2026-06-13 12.08.36](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-13%2012.08.36.png)
 
 ### 响应描述
 
@@ -6825,7 +6824,7 @@ API 文档会把该路径操作标记为弃用：
 
 
 
-![截屏2026-06-13 12.17.55](images/截屏2026-06-13 12.17.55.png)
+![截屏2026-06-13 12.17.55](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-13%2012.17.55.png)
 
 
 
@@ -7411,7 +7410,7 @@ async def read_users(commons: CommonsDep):
 
 因此，交互式文档中也会包含这些依赖项的所有信息：
 
-![截屏2026-06-14 14.32.16](images/截屏2026-06-14 14.32.16.png)
+![截屏2026-06-14 14.32.16](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-14%2014.32.16.png)
 
 ### 简单用法
 
@@ -8390,7 +8389,7 @@ def get_item(item_id: str, username: Annotated[str, Depends(get_username)]):
 
 执行顺序大致如下图所示。时间轴从上到下，每一列都代表交互或执行代码的一部分。
 
-![截屏2026-06-14 23.32.05](images/截屏2026-06-14 23.32.05.png)
+![截屏2026-06-14 23.32.05](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-14%2023.32.05.png)
 
 
 
@@ -8441,7 +8440,7 @@ def get_user_me(username: Annotated[str, Depends(get_username, scope="function")
 
 这是因为任何依赖都需要能够在子依赖之前运行其退出代码，因为它的退出代码中可能还需要使用这些子依赖。
 
-![截屏2026-06-14 23.51.45](images/截屏2026-06-14 23.51.45.png)
+![截屏2026-06-14 23.51.45](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-14%2023.51.45.png)
 
 ----
 
@@ -8672,7 +8671,7 @@ async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
 
 你会看到类似这样的界面：
 
-![截屏2026-06-15 12.04.38](images/截屏2026-06-15 12.04.38.png)
+![截屏2026-06-15 12.04.38](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2012.04.38.png)
 
 页面右上角已经有一个崭新的“Authorize”按钮。
 
@@ -8680,7 +8679,7 @@ async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
 
 点击它，会弹出一个授权表单，可输入 `username` 和 `password`（以及其它可选字段）：
 
-![截屏2026-06-15 12.08.40](images/截屏2026-06-15 12.08.40.png)
+![截屏2026-06-15 12.08.40](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2012.08.40.png)
 
 
 
@@ -8821,7 +8820,7 @@ async def read_items(token: Annotated[str, Depends(oauth2_scheme)]):
 
 你已经可以在交互式文档中试试了：
 
-![截屏2026-06-15 12.33.12](images/截屏2026-06-15 12.33.12.png)
+![截屏2026-06-15 12.33.12](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2012.33.12.png)
 
 我们还没有验证令牌是否有效，但这已经是一个良好的开端。
 
@@ -9406,9 +9405,9 @@ async def read_users_me(
 
 密码：`secret`
 
-![截屏2026-06-15 17.01.57](images/截屏2026-06-15 17.01.57.png)
+![截屏2026-06-15 17.01.57](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2017.01.57.png)
 
-通过身份验证后，显示下图所示的内容：![截屏2026-06-15 17.02.50](images/截屏2026-06-15 17.02.50.png)
+通过身份验证后，显示下图所示的内容：![截屏2026-06-15 17.02.50](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2017.02.50.png)
 
 #### 获取当前用户数据
 
@@ -9426,11 +9425,11 @@ async def read_users_me(
 }
 ```
 
-![截屏2026-06-15 17.05.55](images/截屏2026-06-15 17.05.55.png)
+![截屏2026-06-15 17.05.55](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2017.05.55.png)
 
 点击小锁图标，注销后，再执行同样的操作，则会得到 HTTP 401 错误：
 
-![截屏2026-06-15 17.06.14](images/截屏2026-06-15 17.06.14.png)
+![截屏2026-06-15 17.06.14](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-15%2017.06.14.png)
 
 #### 未激活用户
 
@@ -9851,7 +9850,7 @@ JWT 除了用于识别用户并允许其直接在你的 API 上执行操作之�
 
 你会看到这样的用户界面：
 
-![截屏2026-06-16 12.36.53](https://raw.githubusercontent.com/Otrname/my---notes/main/%E7%AC%94%E8%AE%B0/images/%E6%88%AA%E5%B1%8F2026-06-16%2012.36.53.png)
+![截屏2026-06-16 12.36.53](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-16%2012.36.53.png)
 
 像之前一样进行授权。
 
@@ -9870,11 +9869,11 @@ JWT 除了用于识别用户并允许其直接在你的 API 上执行操作之�
 }
 ```
 
-![截屏2026-06-16 12.39.48](images/截屏2026-06-16 12.39.48.png)
+![截屏2026-06-16 12.39.48](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-16%2012.39.48.png)
 
 如果你打开开发者工具，你会看到发送的数据只包含令牌。密码只会在第一个请求中用于认证用户并获取访问令牌，之后就不会再发送密码了：
 
-![截屏2026-06-16 12.48.17](images/截屏2026-06-16 12.48.17.png)
+![截屏2026-06-16 12.48.17](https://raw.githubusercontent.com/Otrname/my-images/main/img/截屏2026-06-16%2012.48.17.png)
 
 ### 使用 `scopes` 的高级用法
 
