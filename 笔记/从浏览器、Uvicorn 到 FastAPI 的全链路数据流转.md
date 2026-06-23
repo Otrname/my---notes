@@ -10,9 +10,7 @@
 
 假设你的前端页面执行了如下 `fetch` 代码：
 
-JavaScript
-
-```
+```JavaScript
 fetch('https://example.com/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -24,9 +22,8 @@ fetch('https://example.com/login', {
 
 浏览器无法直接把 JavaScript 对象丢进网络，它会根据 HTTP 协议，将上述代码打包成**纯文本字符串**，并通过 TCP 连接发送出去。此时网络中传输的真实数据如下：
 
-HTTP
 
-```
+```HTTP
 POST /login HTTP/1.1
 Host: example.com
 User-Agent: Mozilla/5.0...
@@ -53,9 +50,9 @@ Uvicorn 内部的 HTTP 解析器会把这段文本切开，解析成 Python 的�
 
 此时在 Uvicorn 内部，数据变成了这样：
 
-Python
 
-```
+
+```Python
 # scope 字典的大致模样
 scope = {
     "type": "http",
@@ -72,9 +69,9 @@ scope = {
 
 紧接着，Uvicorn 会调用 FastAPI 的入口，把 `scope`, `receive`, 和一个用于发送响应的 `send` 函数传给 FastAPI：
 
-Python
 
-```
+
+```Python
 await fastapi_app(scope, receive, send)
 ```
 
@@ -86,9 +83,9 @@ FastAPI 拿到 `scope` 和 `receive` 后开始发力：
 
 FastAPI 检查 `scope["path"]` 为 `/login`，`scope["method"]` 为 `POST`，成功匹配到你在代码里写的路由：
 
-Python
 
-```
+
+```Python
 @app.post("/login")
 async def login(data: UserSchema): # UserSchema 是 Pydantic 模型
     return {"status": "success", "user": data.username}
@@ -115,9 +112,9 @@ FastAPI 不会直接把字典丢给浏览器。它会通过 Uvicorn 传过来的
 
 Uvicorn 收到 FastAPI 通过 `send` 发来的报文片段后，再次施展“组装术”，把 Python 对象重新还原为网络能传输的 **HTTP 响应文本**：
 
-HTTP
 
-```
+
+```HTTP
 HTTP/1.1 200 OK
 date: Tue, 23 Jun 2026 12:00:00 GMT
 server: uvicorn
@@ -139,9 +136,9 @@ Uvicorn 通过 TCP 连接将这一串字节流发送给客户端。
 
 最终，你在前端通过 `await response.json()` 拿到的就是一个纯净的 JavaScript 对象：
 
-JavaScript
 
-```
+
+```JavaScript
 { status: "success", user: "alex" }
 ```
 
