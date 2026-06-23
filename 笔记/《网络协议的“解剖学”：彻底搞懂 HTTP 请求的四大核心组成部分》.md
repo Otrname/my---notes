@@ -63,9 +63,9 @@
 
 ### 总结：一个完整的 HTTP 请求长这样
 
-HTTP
 
-```
+
+```HTTP
 POST /api/login HTTP/1.1                 <-- 请求行
 Host: www.example.com                    <-- 请求头开始
 User-Agent: Mozilla/5.0...
