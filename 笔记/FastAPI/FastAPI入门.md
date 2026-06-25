@@ -10154,3 +10154,2807 @@ async def main():
 ---
 
 ## SQL (关系型 )数据库
+
+**FastAPI** 并不要求你使用 SQL（关系型）数据库。你可以使用你想用的**任何数据库**。
+
+这里，我们来看一个使用 [SQLModel](https://sqlmodel.tiangolo.com/) 的示例。
+
+**SQLModel** 基于 [SQLAlchemy](https://www.sqlalchemy.org/) 和 Pydantic 构建。它由 **FastAPI** 的同一作者制作，旨在完美匹配需要使用**SQL 数据库**的 FastAPI 应用程序。
+
+> 🔥 提示
+>
+> 你可以使用任意其他你想要的 SQL 或 NoSQL 数据库库（在某些情况下称为 "ORMs"），FastAPI 不会强迫你使用任何东西。😎
+
+由于 SQLModel 基于 SQLAlchemy，因此你可以轻松使用任何由 SQLAlchemy **支持的数据库**（这也让它们被 SQLModel 支持），例如：
+
+- PostgreSQL
+- MySQL
+- SQLite
+- Oracle
+- Microsoft SQL Server 等
+
+在这个示例中，我们将使用 **SQLite**，因为它使用单个文件，并且 Python 对其有集成支持。因此，你可以直接复制这个示例并运行。
+
+之后，对于你的生产应用程序，你可能会想要使用像 **PostgreSQL** 这样的数据库服务器。
+
+这是一个非常简单和简短的教程。如果你想了解一般的数据库、SQL 或更高级的功能，请查看 [SQLModel 文档](https://sqlmodel.tiangolo.com/)。
+
+### 安装 `SQLModel`
+
+首先，确保你创建并激活了[虚拟环境](https://fastapi.tiangolo.com/zh/virtual-environments/)，然后安装 `sqlmodel`：
+
+### 创建含有单一模型的应用
+
+我们先创建应用的最简单的第一个版本，只有一个 **SQLModel** 模型。
+
+稍后我们将通过下面的**多个模型**提高其安全性和多功能性。🤓
+
+#### 创建模型
+
+导入SQLModel模型
+
+```Python
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, Query
+from sqlmodel import Field, Session, SQLModel, create_engine, select
+
+
+class Hero(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+    secret_name: str
+
+# Code below omitted 👇
+```
+
+`Hero` 类与 Pydantic 模型非常相似（实际上，从底层来看，它确实就是一个 Pydantic 模型）。
+
+有一些区别：
+
+- `table=True` 会告诉 SQLModel 这是一个*表模型*，它应该表示 SQL 数据库中的一个**表**，而不仅仅是一个*数据模型*（就像其他常规的 Pydantic 类一样）。
+
+- `Field(primary_key=True)` 会告诉 SQLModel `id` 是 SQL 数据库中的**主键**（你可以在 SQLModel 文档中了解更多关于 SQL 主键的信息）。
+
+  **注意：** 我们为主键字段使用 `int | None`，这样在 Python 代码中我们可以在没有 `id`（`id=None`）的情况下创建对象，并假定数据库在保存时会生成它。SQLModel 会理解数据库会提供 `id`，并在数据库模式中将该列定义为非空的 `INTEGER`。详见 [SQLModel 关于主键的文档](https://sqlmodel.tiangolo.com/tutorial/create-db-and-table/#primary-key-id)。
+
+- `Field(index=True)` 会告诉 SQLModel 应该为此列创建一个 **SQL 索引**，这样在读取按此列过滤的数据时，程序能在数据库中进行更快的查找。
+
+  SQLModel 会知道声明为 `str` 的内容将是类型为 `TEXT`（或 `VARCHAR`，具体取决于数据库）的 SQL 列。
+
+#### 创建引擎（Engine）
+
+  SQLModel 的 `engine`（实际上它是一个 SQLAlchemy 的 `engine`）是用来与数据库**保持连接**的。
+
+  你只需构建**一个 `engine` 对象**，让你的所有代码连接到同一个数据库。
+
+```python
+# Code above omitted 👆
+
+sqlite_file_name = "database.db"
+sqlite_url = f"sqlite:///{sqlite_file_name}"
+
+connect_args = {"check_same_thread": False}
+engine = create_engine(sqlite_url, connect_args=connect_args)
+
+# Code below omitted 👇
+```
+
+使用 `check_same_thread=False` 可以让 FastAPI 在不同线程中使用同一个 SQLite 数据库。这很有必要，因为**单个请求**可能会使用**多个线程**（例如在依赖项中）。
+
+不用担心，我们会按照代码结构确保**每个请求使用一个单独的 SQLModel 会话（session）**，这实际上就是 `check_same_thread` 想要实现的。
+
+#### 创建表
+
+然后，我们来添加一个函数，使用 `SQLModel.metadata.create_all(engine)` 为所有*表模型***创建表**。
+
+```python
+# Code above omitted 👆
+
+def create_db_and_tables():
+    SQLModel.metadata.create_all(engine)
+
+# Code below omitted 👇
+```
+
+#### 创建会话（Session）依赖项
+
+**`Session`** 会存储**内存中的对象**并跟踪数据中所需更改的内容，然后它**使用 `engine`** 与数据库进行通信。
+
+我们会使用 `yield` 创建一个 FastAPI **依赖项**，为每个请求提供一个新的 `Session`。这确保我们每个请求使用一个单独的会话。🤓
+
+然后我们创建一个 `Annotated` 的依赖项 `SessionDep` 来简化其他也会用到此依赖的代码。
+
+````python
+# Code above omitted 👆
+
+def get_session():
+    with Session(engine) as session:
+        yield session
+
+
+SessionDep = Annotated[Session, Depends(get_session)]
+
+# Code below omitted 👇
+````
+
+#### 在启动时创建数据库表
+
+我们会在应用程序启动时创建数据库表。
+
+```python
+# Code above omitted 👆
+
+app = FastAPI()
+
+
+@app.on_event("startup")
+def on_startup():
+    create_db_and_tables()
+
+# Code below omitted 👇
+```
+
+
+
+此处，在应用程序启动事件中，我们创建了表。
+
+在生产环境中，你可能会使用一个在启动应用程序之前运行的迁移脚本。🤓
+
+#### 创建 Hero
+
+因为每个 SQLModel 模型同时也是一个 Pydantic 模型，所以你可以在与 Pydantic 模型相同的**类型注解**中使用它。
+
+例如，如果你声明一个类型为 `Hero` 的参数，它将从 **JSON 主体**中读取数据。
+
+同样，你可以将其声明为函数的**返回类型**，然后数据的结构就会显示在自动生成的 API 文档界面中。
+
+```python
+# Code above omitted 👆
+
+@app.post("/heroes/")
+def create_hero(hero: Hero, session: SessionDep) -> Hero:
+    session.add(hero)
+    session.commit()
+    session.refresh(hero)
+    return hero
+
+# Code below omitted 👇
+```
+
+
+
+这里，我们使用 `SessionDep` 依赖项（一个 `Session`）将新的 `Hero` 添加到 `Session` 实例中，提交更改到数据库，刷新 `hero` 中的数据，并返回它。
+
+#### 读取 
+
+我们可以使用 `select()` 从数据库中**读取** `Hero`，并利用 `limit` 和 `offset` 来对结果进行分页。
+
+```python
+# Code above omitted 👆
+
+@app.get("/heroes/")
+def read_heroes(
+    session: SessionDep,
+    offset: int = 0,
+    limit: Annotated[int, Query(le=100)] = 100,
+) -> list[Hero]:
+    heroes = session.exec(select(Hero).offset(offset).limit(limit)).all()
+    return heroes
+
+# Code below omitted 👇
+```
+
+
+
+#### 读取单个 Hero
+
+我们可以**读取**单个 `Hero`。
+
+```python
+# Code above omitted 👆
+
+@app.get("/heroes/{hero_id}")
+def read_hero(hero_id: int, session: SessionDep) -> Hero:
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    return hero
+
+# Code below omitted 👇
+```
+
+#### 删除单个 Hero
+
+我们也可以**删除**一个 `Hero`。
+
+```python
+# Code above omitted 👆
+
+@app.delete("/heroes/{hero_id}")
+def delete_hero(hero_id: int, session: SessionDep):
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    session.delete(hero)
+    session.commit()
+    return {"ok": True}
+```
+
+#### 运行应用
+
+你可以运行这个应用：
+
+```bash
+fastapi dev
+```
+
+然后在 `/docs` UI 中，你能够看到 **FastAPI** 会用这些**模型**来**记录** API，并且还会用它们来**序列化**和**验证**数据。
+
+![截屏2026-06-17 20.58.09](https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-17%2020.58.09.png)
+
+### 使用多个模型更新应用
+
+现在让我们稍微**重构**一下这个应用，以提高**安全性**和**多功能性**。
+
+如果你查看之前的应用程序，你可以在 UI 界面中看到，到目前为止，它允许客户端决定要创建的 `Hero` 的 `id`。😱
+
+我们不应该允许这样做，因为他们可能会覆盖我们在数据库中已经分配的 `id`。决定 `id` 的行为应该由**后端**或**数据库**来完成，**而非客户端**。
+
+此外，我们为 hero 创建了一个 `secret_name`，但到目前为止，我们在各处都返回了它，这就不太**秘密**了……😅
+
+我们将通过添加一些**额外的模型**来解决这些问题，而 SQLModel 将在这里大放异彩。✨
+
+#### 创建多个模型
+
+在 **SQLModel** 中，任何含有 `table=True` 属性的模型类都是一个**表模型**。
+
+任何不含有 `table=True` 属性的模型类都是**数据模型**，这些实际上只是 Pydantic 模型（附带一些小的额外功能）。🤓
+
+有了 SQLModel，我们就可以利用**继承**来在所有情况下**避免重复**所有字段。
+
+##### `HeroBase` - 基类
+
+我们从一个 `HeroBase` 模型开始，该模型具有所有模型**共享的字段**：
+
+- `name`
+- `age`
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/sql-databases/#__tabbed_28_1)
+
+```
+# Code above omitted 👆
+
+class HeroBase(SQLModel):
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+
+# Code below omitted 👇
+```
+
+##### `Hero` - *表模型*
+
+接下来，我们创建 `Hero`，实际的*表模型*，并添加那些不总是在其他模型中的**额外字段**：
+
+- `id`
+- `secret_name`
+
+因为 `Hero` 继承自 `HeroBase`，所以它**也**包含了在 `HeroBase` 中声明过的**字段**。因此 `Hero` 的所有字段为：
+
+- `id`
+- `name`
+- `age`
+- `secret_name`
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/sql-databases/#__tabbed_31_1)
+
+```
+# Code above omitted 👆
+
+class HeroBase(SQLModel):
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+
+
+class Hero(HeroBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    secret_name: str
+
+# Code below omitted 👇
+```
+
+
+
+##### `HeroPublic` - 公共*数据模型*
+
+接下来，我们创建一个 `HeroPublic` 模型，这是将**返回**给 API 客户端的模型。
+
+它包含与 `HeroBase` 相同的字段，因此不会包括 `secret_name`。
+
+终于，我们英雄的身份得到了保护！🥷
+
+它还重新声明了 `id: int`。这样我们便与 API 客户端建立了一种**约定**，使他们始终可以期待 `id` 存在并且是一个整数 `int`（永远不会是 `None`）。
+
+
+
+> 🔥 提示
+>
+> 确保返回模型始终提供一个值并且始终是 `int`（而不是 `None`）对 API 客户端非常有用，他们可以在这种确定性下编写更简单的代码。
+>
+> 此外，**自动生成的客户端**将拥有更简洁的接口，这样与你的 API 交互的开发者就能更轻松地使用你的 API。😎
+
+
+`HeroPublic` 中的所有字段都与 `HeroBase` 中的相同，其中 `id` 声明为 `int`（不是 `None`）：
+
+- `id`
+- `name`
+- `age`
+
+```python
+# Code above omitted 👆
+
+class HeroBase(SQLModel):
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+
+
+class Hero(HeroBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    secret_name: str
+
+
+class HeroPublic(HeroBase):
+    id: int
+
+# Code below omitted 👇
+```
+
+
+
+##### `HeroCreate` - 用于创建 hero 的*数据模型*
+
+现在我们创建一个 `HeroCreate` 模型，这是用于**验证**客户端数据的模型。
+
+它不仅拥有与 `HeroBase` 相同的字段，还有 `secret_name`。
+
+现在，当客户端**创建一个新的 hero** 时，他们会发送 `secret_name`，它会被存储到数据库中，但这些 `secret_name` 不会通过 API 返回给客户端。
+
+> 🔥 提示
+>
+> 这应当是**密码**被处理的方式：接收密码，但不要通过 API 返回它们。
+>
+> 在存储密码之前，你还应该对密码的值进行**哈希**处理，**绝不要以明文形式存储它们**。
+
+`HeroCreate` 的字段包括：
+
+- `name`
+- `age`
+- `secret_name`
+
+
+
+```python
+# Code above omitted 👆
+
+class HeroBase(SQLModel):
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+
+
+class Hero(HeroBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    secret_name: str
+
+
+class HeroPublic(HeroBase):
+    id: int
+
+
+class HeroCreate(HeroBase):
+    secret_name: str
+
+# Code below omitted 👇
+```
+
+
+
+#### `HeroUpdate` - 用于更新 hero 的*数据模型
+
+在之前的应用程序中，我们没有办法**更新 hero**，但现在有了**多个模型**，我们便能做到这一点了。🎉
+
+`HeroUpdate` *数据模型*有些特殊，它包含创建新 hero 所需的**所有相同字段**，但所有字段都是**可选的**（它们都有默认值）。这样，当你更新一个 hero 时，你可以只发送你想要更新的字段。
+
+因为所有**字段实际上**都发生了**变化**（类型现在包括 `None`，并且它们现在有一个默认值 `None`），我们需要**重新声明**它们。
+
+我们并不真的需要从 `HeroBase` 继承，因为我们会重新声明所有字段。我会让它继承只是为了保持一致，但这并不必要。这更多是个人喜好的问题。🤷
+
+`HeroUpdate` 的字段包括：
+
+- `name`
+- `age`
+- `secret_name`
+
+```python
+# Code above omitted 👆
+
+class HeroBase(SQLModel):
+    name: str = Field(index=True)
+    age: int | None = Field(default=None, index=True)
+
+
+class Hero(HeroBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    secret_name: str
+
+
+class HeroPublic(HeroBase):
+    id: int
+
+
+class HeroCreate(HeroBase):
+    secret_name: str
+
+
+class HeroUpdate(HeroBase):
+    name: str | None = None
+    age: int | None = None
+    secret_name: str | None = None
+
+# Code below omitted 👇
+```
+
+
+
+#### 使用 `HeroCreate` 创建并返回 `HeroPublic`
+
+既然我们有了**多个模型**，我们就可以对使用它们的应用程序部分进行更新。
+
+我们在请求中接收到一个 `HeroCreate` *数据模型*，然后从中创建一个 `Hero` *表模型*。
+
+这个新的*表模型* `Hero` 会包含客户端发送的字段，以及一个由数据库生成的 `id`。
+
+然后我们将与函数中相同的*表模型* `Hero` 原样返回。但是由于我们使用 `HeroPublic` *数据模型*声明了 `response_model`，**FastAPI** 会使用 `HeroPublic` 来验证和序列化数据。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/sql-databases/#__tabbed_43_1)
+
+```python
+# Code above omitted 👆
+
+@app.post("/heroes/", response_model=HeroPublic)
+def create_hero(hero: HeroCreate, session: SessionDep):
+    db_hero = Hero.model_validate(hero)
+    session.add(db_hero)
+    session.commit()
+    session.refresh(db_hero)
+    return db_hero
+
+# Code below omitted 👇
+```
+
+
+
+#### 使用 `HeroUpdate` 更新单个 Hero
+
+我们可以**更新**单个 hero。为此，我们会使用 HTTP 的 `PATCH` 操作。
+
+在代码中，我们会得到一个 `dict`，其中包含客户端发送的所有数据，**只有客户端发送的数据**，并排除了任何一个仅仅作为默认值存在的值。为此，我们使用 `exclude_unset=True`。这是最主要的技巧。🪄
+
+然后我们会使用 `hero_db.sqlmodel_update(hero_data)`，来利用 `hero_data` 的数据更新 `hero_db`。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/sql-databases/#__tabbed_52_1)
+
+```python 
+# Code above omitted 👆
+
+@app.patch("/heroes/{hero_id}", response_model=HeroPublic)
+def update_hero(hero_id: int, hero: HeroUpdate, session: SessionDep):
+    hero_db = session.get(Hero, hero_id)
+    if not hero_db:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    hero_data = hero.model_dump(exclude_unset=True)
+    hero_db.sqlmodel_update(hero_data)
+    session.add(hero_db)
+    session.commit()
+    session.refresh(hero_db)
+    return hero_db
+
+# Code below omitted 👇
+```
+
+
+
+#### (再次）删除单个 Hero
+
+**删除**一个 hero 基本保持不变。
+
+我们不会满足在这一部分中重构一切的愿望。😅
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/sql-databases/#__tabbed_55_1)
+
+```python
+# Code above omitted 👆
+
+@app.delete("/heroes/{hero_id}")
+def delete_hero(hero_id: int, session: SessionDep):
+    hero = session.get(Hero, hero_id)
+    if not hero:
+        raise HTTPException(status_code=404, detail="Hero not found")
+    session.delete(hero)
+    session.commit()
+    return {"ok": True}
+```
+
+
+
+### (再次）运行应用
+
+如果你进入 `/docs` API UI，你会看到它现在已经更新，并且在创建 hero 时，它不会再期望从客户端接收 `id` 数据等。
+
+![截屏2026-06-18 11.41.57](https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-18%2011.41.57.png)
+
+### 总结
+
+你可以使用 [**SQLModel**](https://sqlmodel.tiangolo.com/) 与 SQL 数据库进行交互，并通过*数据模型*和*表模型*简化代码。
+
+你可以在 **SQLModel** 文档中学习到更多内容，其中有一个更详细的[将 SQLModel 与 **FastAPI** 一起使用的迷你教程](https://sqlmodel.tiangolo.com/tutorial/fastapi/)。🚀
+
+
+
+----
+
+## 更大的应用 - 多个文件
+
+如果你正在开发一个应用程序或Web API，很少会将所有内容都放在一文件中。
+
+Fast API提供了一个方便的工具，可以在保持所有灵活性放入同时构建你的应用程序。
+
+> ✏️ 注意
+>
+> 如果你来自 Flask,那这相当于Flask的 Blueprints。
+
+### 一个文件结构示例
+
+假设你的文件结构如下：
+
+```bash
+.
+├── app                  # 「app」是一个 Python 包
+│   ├── __init__.py      # 这个文件使「app」成为一个 Python 包
+│   ├── main.py          # 「main」模块，例如 import app.main
+│   ├── dependencies.py  # 「dependencies」模块，例如 import app.dependencies
+│   └── routers          # 「routers」是一个「Python 子包」
+│   │   ├── __init__.py  # 使「routers」成为一个「Python 子包」
+│   │   ├── items.py     # 「items」子模块，例如 import app.routers.items
+│   │   └── users.py     # 「users」子模块，例如 import app.routers.users
+│   └── internal         # 「internal」是一个「Python 子包」
+│       ├── __init__.py  # 使「internal」成为一个「Python 子包」
+│       └── admin.py     # 「admin」子模块，例如 import app.internal.admin
+```
+
+
+
+- `app` 目录包含了所有内容。并且它有一个空文件 `app/__init__.py`，因此它是一个「Python 包」（「Python 模块」的集合）：`app`。
+- 它包含一个 `app/main.py` 文件。由于它位于一个 Python 包（一个包含 `__init__.py` 文件的目录）中，因此它是该包的一个「模块」：`app.main`。
+- 还有一个 `app/dependencies.py` 文件，就像 `app/main.py` 一样，它是一个「模块」：`app.dependencies`。
+- 有一个子目录 `app/routers/` 包含另一个 `__init__.py` 文件，因此它是一个「Python 子包」：`app.routers`。
+- 文件 `app/routers/items.py` 位于 `app/routers/` 包中，因此它是一个子模块：`app.routers.items`。
+- 同样适用于 `app/routers/users.py`，它是另一个子模块：`app.routers.users`。
+- 还有一个子目录 `app/internal/` 包含另一个 `__init__.py` 文件，因此它是又一个「Python 子包」：`app.internal`。
+- `app/internal/admin.py` 是另一个子模块：`app.internal.admin`。![package.drawio](https://raw.githubusercontent.com/Otrname/my-images/main/img/package.drawio.svg)
+
+### `APIRouter`
+
+假设专门用于处理用户逻辑的文件是位于 `/app/routers/users.py` 的子模块。
+
+你希望将与用户相关的*路径操作*与其他代码分开，以使其井井有条。
+
+但它仍然是同一 **FastAPI** 应用程序/web API 的一部分（它是同一「Python 包」的一部分）。
+
+你可以使用 `APIRouter` 为该模块创建*路径操作*。
+
+#### 导入 `APIRouter`
+
+你可以导入它并通过与 `FastAPI` 类相同的方式创建一个「实例」：
+
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/users/", tags=["users"])
+async def read_users():
+    return [{"username": "Rick"}, {"username": "Morty"}]
+
+
+@router.get("/users/me", tags=["users"])
+async def read_user_me():
+    return {"username": "fakecurrentuser"}
+
+
+@router.get("/users/{username}", tags=["users"])
+async def read_user(username: str):
+    return {"username": username}
+```
+
+
+
+#### 使用 `APIRouter` 的*路径操作*
+
+然后你可以使用它来声明*路径操作*。
+
+使用方式与 `FastAPI` 类相同：
+
+[Python 3.8+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_2_1)
+
+**app/routers/users.py**
+
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+
+
+@router.get("/users/", tags=["users"])
+async def read_users():
+    return [{"username": "Rick"}, {"username": "Morty"}]
+
+
+@router.get("/users/me", tags=["users"])
+async def read_user_me():
+    return {"username": "fakecurrentuser"}
+
+
+@router.get("/users/{username}", tags=["users"])
+async def read_user(username: str):
+    return {"username": username}
+```
+
+你可以将 `APIRouter` 视为一个「迷你 `FastAPI`」类。
+
+所有相同的选项都得到支持。
+
+所有相同的 `parameters`、`responses`、`dependencies`、`tags` 等等。
+
+我们将在主 `FastAPI` 应用中包含该 `APIRouter`，但首先，让我们来看看依赖项和另一个 `APIRouter`。
+
+### 依赖项
+
+我们了解到我们将需要一些在应用程序的好几个地方所使用的依赖项。
+
+因此，我们将它们放在它们自己的 `dependencies` 模块（`app/dependencies.py`）中。
+
+现在我们将使用一个简单的依赖项来读取一个自定义的 `X-Token` 请求首部：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_3_1)
+
+**app/dependencies.py**
+
+```python
+from typing import Annotated
+
+from fastapi import Header, HTTPException
+
+
+async def get_token_header(x_token: Annotated[str, Header()]):
+    if x_token != "fake-super-secret-token":
+        raise HTTPException(status_code=400, detail="X-Token header invalid")
+
+
+async def get_query_token(token: str):
+    if token != "jessica":
+        raise HTTPException(status_code=400, detail="No Jessica token provided")
+```
+
+### 其他使用 `APIRouter` 的模块
+
+假设你在位于 `app/routers/items.py` 的模块中还有专门用于处理应用程序中「项目」的端点。
+
+你具有以下*路径操作*：
+
+- `/items/`
+- `/items/{item_id}`
+
+这和 `app/routers/users.py` 的结构完全相同。
+
+但是我们想变得更聪明并简化一些代码。
+
+我们知道此模块中的所有*路径操作*都有相同的：
+
+- 路径 `prefix`：`/items`。
+- `tags`：（仅有一个 `items` 标签）。
+- 额外的 `responses`。
+- `dependencies`：它们都需要我们创建的 `X-Token` 依赖项。
+
+因此，我们可以将其添加到 `APIRouter` 中，而不是将其添加到每个路径操作中。
+
+```python
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..dependencies import get_token_header
+
+router = APIRouter(
+    prefix="/items",
+    tags=["items"],
+    dependencies=[Depends(get_token_header)],
+    responses={404: {"description": "Not found"}},
+)
+
+
+fake_items_db = {"plumbus": {"name": "Plumbus"}, "gun": {"name": "Portal Gun"}}
+
+
+@router.get("/")
+async def read_items():
+    return fake_items_db
+
+
+@router.get("/{item_id}")
+async def read_item(item_id: str):
+    if item_id not in fake_items_db:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return {"name": fake_items_db[item_id]["name"], "item_id": item_id}
+
+
+@router.put(
+    "/{item_id}",
+    tags=["custom"],
+    responses={403: {"description": "Operation forbidden"}},
+)
+async def update_item(item_id: str):
+    if item_id != "plumbus":
+        raise HTTPException(
+            status_code=403, detail="You can only update the item: plumbus"
+        )
+    return {"item_id": item_id, "name": "The great Plumbus"}
+```
+
+由于每个*路径操作*的路径都必须以 `/` 开头，例如：
+
+```python
+@router.get("/{item_id}")
+async def read_item(item_id: str):
+    ...
+```
+
+...前缀不能以 `/` 作为结尾。
+
+因此，本例中的前缀为 `/items`。
+
+我们还可以添加一个 `tags` 列表和额外的 `responses` 列表，这些参数将应用于此路由器中包含的所有*路径操作*。
+
+我们可以添加一个 `dependencies` 列表，这些依赖项将被添加到路由器中的所有*路径操作*中，并将针对向它们发起的每个请求执行/解决。
+
+最终结果是项目相关的路径现在为：
+
+- `/items/`
+- `/items/{item_id}`
+
+...如我们所愿。
+
+- 它们将被标记为仅包含单个字符串 `"items"` 的标签列表。
+
+  - 这些「标签」对于自动化交互式文档系统（使用 OpenAPI）特别有用。
+
+- 所有的路径操作都将包含预定义的 `responses`。
+
+- 所有的这些*路径操作*都将在自身之前计算/执行 `dependencies` 列表。
+
+  - 如果你还在一个具体的*路径操作*中声明了依赖项，**它们也会被执行**。
+
+  - 路由器的依赖项最先执行，然后是[装饰器中的 `dependencies`](https://fastapi.tiangolo.com/zh/tutorial/dependencies/dependencies-in-path-operation-decorators/)，再然后是普通的参数依赖项。
+
+  - 你还可以添加[具有 `scopes` 的 `Security` 依赖项](https://fastapi.tiangolo.com/zh/advanced/security/oauth2-scopes/)。
+
+#### 导入依赖项
+
+这些代码位于 app.routers.items 模块，app/routers/items.py 文件中。
+
+我们需要从 app.dependencies 模块即 app/dependencies.py 文件中获取依赖函数。
+
+因此，我们通过 .. 对依赖项使用了相对导入：
+```python
+	from ..dependencies import get_token_header
+```
+
+##### 相对导入如何工作
+
+一个单点 `.`，例如：
+
+```python
+from .dependencies import get_token_header
+```
+
+表示：
+
+- 从该模块（`app/routers/items.py` 文件）所在的同一个包（`app/routers/` 目录）开始...
+- 找到 `dependencies` 模块（一个位于 `app/routers/dependencies.py` 的虚构文件）...
+- 然后从中导入函数 `get_token_header`。
+
+但是该文件并不存在，我们的依赖项位于 `app/dependencies.py` 文件中。
+
+请记住我们的程序/文件结构是怎样的：![package.drawio](https://raw.githubusercontent.com/Otrname/my-images/main/img/package.drawio-20260618124738615.svg)
+
+两个点 `..`，例如：
+
+```python
+from ..dependencies import get_token_header
+```
+
+表示：
+
+- 从该模块（`app/routers/items.py` 文件）所在的同一个包（`app/routers/` 目录）开始...
+- 跳转到其父包（`app/` 目录）...
+- 在该父包中，找到 `dependencies` 模块（位于 `app/dependencies.py` 的文件）...
+- 然后从中导入函数 `get_token_header`。
+
+正常工作了！🎉
+
+------
+
+同样，如果我们使用了三个点 `...`，例如：
+
+```python
+from ...dependencies import get_token_header
+```
+
+那将意味着：
+
+- 从该模块（`app/routers/items.py` 文件）所在的同一个包（`app/routers/` 目录）开始...
+- 跳转到其父包（`app/` 目录）...
+- 然后跳转到该包的父包（该父包并不存在，`app` 已经是最顶层的包 😱）...
+- 在该父包中，找到 `dependencies` 模块（位于 `app/dependencies.py` 的文件）...
+- 然后从中导入函数 `get_token_header`。
+
+这将引用 `app/` 的往上一级，带有其自己的 `__init __.py` 等文件的某个包。但是我们并没有这个包。因此，这将在我们的示例中引发错误。🚨
+
+但是现在你知道了它的工作原理，因此无论它们多么复杂，你都可以在自己的应用程序中使用相对导入。🤓
+
+
+
+
+
+#### 添加一些自定义的 `tags`、`responses` 和 `dependencies`
+
+我们不打算在每个*路径操作*中添加前缀 `/items` 或 `tags =["items"]`，因为我们将它们添加到了 `APIRouter` 中。
+
+但是我们仍然可以添加*更多*将会应用于特定的*路径操作*的 `tags`，以及一些特定于该*路径操作*的额外 `responses`：
+
+[Python 3.8+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_6_1)
+
+**app/routers/items.py**
+
+```python
+
+@router.put(
+    "/{item_id}",
+    tags=["custom"],
+    responses={403: {"description": "Operation forbidden"}},
+)
+
+```
+
+
+
+### `FastAPI` 主体
+
+现在，让我们来看看位于 `app/main.py` 的模块。
+
+在这里你导入并使用 `FastAPI` 类。
+
+这将是你的应用程序中将所有内容联结在一起的主文件。
+
+并且由于你的大部分逻辑现在都存在于其自己的特定模块中，因此主文件的内容将非常简单。
+
+
+
+#### 导入 `FastAPI`
+
+你可以像平常一样导入并创建一个 `FastAPI` 类。
+
+我们甚至可以声明[全局依赖项](https://fastapi.tiangolo.com/zh/tutorial/dependencies/global-dependencies/)，它会和每个 `APIRouter` 的依赖项组合在一起：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_7_1)
+
+**app/main.py**
+
+```
+from fastapi import Depends, FastAPI
+
+from .dependencies import get_query_token, get_token_header
+
+
+app = FastAPI(dependencies=[Depends(get_query_token)])
+```
+
+#### 导入 `APIRouter`
+
+现在，我们导入具有 `APIRouter` 的其他子模块：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_8_1)
+
+**app/main.py**
+
+```python
+from fastapi import Depends, FastAPI
+
+from .dependencies import get_query_token, get_token_header
+from .internal import admin
+from .routers import items, users
+```
+
+由于文件 `app/routers/users.py` 和 `app/routers/items.py` 是同一 Python 包 `app` 一个部分的子模块，因此我们可以使用单个点 `.` 通过「相对导入」来导入它们。
+
+#### 导入是如何工作的
+
+这段代码：
+
+```
+from .routers import items, users
+```
+
+表示：
+
+- 从该模块（`app/main.py` 文件）所在的同一个包（`app/` 目录）开始...
+- 寻找 `routers` 子包（位于 `app/routers/` 的目录）...
+- 从该包中，导入子模块 `items` (位于 `app/routers/items.py` 的文件) 以及 `users` (位于 `app/routers/users.py` 的文件)...
+
+`items` 模块将具有一个 `router` 变量（`items.router`）。这与我们在 `app/routers/items.py` 文件中创建的变量相同，它是一个 `APIRouter` 对象。
+
+然后我们对 `users` 模块进行相同的操作。
+
+我们也可以像这样导入它们：
+
+```python
+from app.routers import items, users
+```
+
+
+
+> ⚠️ 注意
+>
+> 第一个版本是「相对导入」：
+>
+> ```python
+> from .routers import items, users
+> ```
+>
+> 第二个版本是「绝对导入」：
+>
+> ```python
+> from app.routers import items, users
+> ```
+>
+> 要了解有关 Python 包和模块的更多信息，请查阅[关于 Modules 的 Python 官方文档](https://docs.python.org/3/tutorial/modules.html)。
+
+
+
+#### 避免名称冲突
+
+我们将直接导入 `items` 子模块，而不是仅导入其 `router` 变量。
+
+这是因为我们在 `users` 子模块中也有另一个名为 `router` 的变量。
+
+如果我们一个接一个地导入，例如：
+
+```python
+from .routers.items import router
+from .routers.users import router
+```
+
+来自 `users` 的 `router` 将覆盖来自 `items` 中的 `router`，我们将无法同时使用它们。
+
+因此，为了能够在同一个文件中使用它们，我们直接导入子模块：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_9_1)
+
+**app/main.py**
+
+```python
+from .routers import items, users
+```
+
+
+
+---
+
+####包含 `users` 和 `items` 的 `APIRouter`
+
+现在，让我们来包含来自 `users` 和 `items` 子模块的 `router`。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_10_1)
+
+**app/main.py**
+
+```
+app.include_router(users.router)
+app.include_router(items.router)
+```
+
+
+
+##### 包含一个有自定义 `prefix`、`tags`、`responses` 和 `dependencies` 的 `APIRouter`
+
+现在，假设你的组织为你提供了 `app/internal/admin.py` 文件。
+
+它包含一个带有一些由你的组织在多个项目之间共享的管理员*路径操作*的 `APIRouter`。
+
+对于此示例，它将非常简单。但是假设由于它是与组织中的其他项目所共享的，因此我们无法对其进行修改，以及直接在 `APIRouter` 中添加 `prefix`、`dependencies`、`tags` 等：
+
+[Python 3.8+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_11_1)
+
+**app/internal/admin.py**
+
+```python
+from fastapi import APIRouter
+
+router = APIRouter()
+```
+
+但是我们仍然希望在包含 `APIRouter` 时设置一个自定义的 `prefix`，以便其所有*路径操作*以 `/admin` 开头，我们希望使用本项目已经有的 `dependencies` 保护它，并且我们希望它包含自定义的 `tags` 和 `responses`。
+
+我们可以通过将这些参数传递给 `app.include_router()` 来完成所有的声明，而不必修改原始的 `APIRouter`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/#__tabbed_12_1)
+
+**app/main.py**
+
+```python
+
+app.include_router(items.router)
+app.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["admin"],
+    dependencies=[Depends(get_token_header)],
+    responses={418: {"description": "I'm a teapot"}},
+)
+```
+
+这样，原始的 `APIRouter` 将保持不变，因此我们仍然可以与组织中的其他项目共享相同的 `app/internal/admin.py` 文件。
+
+结果是在我们的应用程序中，来自 `admin` 模块的每个*路径操作*都将具有：
+
+- `/admin` 前缀 。
+- `admin` 标签。
+- `get_token_header` 依赖项。
+- `418` 响应。 🍵
+
+但这只会影响我们应用中的 `APIRouter`，而不会影响使用它的任何其他代码。
+
+因此，举例来说，其他项目能够以不同的身份认证方法使用相同的 `APIRouter`。
+
+#### 包含一个*路径操作*
+
+我们还可以直接将*路径操作*添加到 `FastAPI` 应用中。
+
+这里我们这样做了...只是为了表明我们可以做到🤷：
+
+```python
+@app.get("/")
+async def root():
+    return {"message": "Hello Bigger Applications!"}
+```
+
+
+
+### 在 `pyproject.toml` 中配置 `entrypoint`
+
+因为你的 FastAPI `app` 对象位于 `app/main.py` 中，你可以在 `pyproject.toml` 中这样配置 `entrypoint`：
+
+```python
+[tool.fastapi]
+entrypoint = "app.main:app"
+```
+
+等价于像这样导入：
+
+```python
+from app.main import app
+```
+
+这样 `fastapi` 命令就知道到哪里去找到你的应用了。
+
+
+
+### 查看自动化的 API 文档
+
+然后打开位于 http://127.0.0.1:8000/docs 的文档。
+
+你将看到使用了正确路径（和前缀）和正确标签的自动化 API 文档，包括了来自所有子模块的路径：
+
+![截屏2026-06-18 16.31.10](https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-18%2016.31.10.png)
+
+### 多次使用不同的 `prefix` 包含同一个路由器
+
+你也可以在*同一*路由器上使用不同的前缀来多次使用 `.include_router()`。
+
+在有些场景这可能有用，例如以不同的前缀公开同一个的 API，比方说 `/api/v1` 和 `/api/latest`。
+
+这是一个你可能并不真正需要的高级用法，但万一你有需要了就能够用上。
+
+### 在另一个 `APIRouter` 中包含一个 `APIRouter`
+
+与在 `FastAPI` 应用程序中包含 `APIRouter` 的方式相同，你也可以在另一个 `APIRouter` 中包含 `APIRouter`，通过：
+
+```python
+router.include_router(other_router)
+```
+
+你可以在将 `router` 包含到 `FastAPI` 应用之前或之后执行此操作。FastAPI 仍然会在路由和 OpenAPI 中包含 `other_router` 中的*路径操作*。
+
+同样适用于之后添加到这些路由器的*路径操作*。它们也会通过先前的包含可见。
+
+
+
+----
+
+----
+
+## 流式输出JSONM Lines
+
+当你想以“流”的方式发送一系列数据时，可以使用 JSON Lines。
+
+### 什么是流
+
+“流式传输”数据意味着你的应用会在整段数据全部准备好之前，就开始把每个数据项发送给客户端。
+
+也就是说，它会先发送第一个数据项，客户端会接收并开始处理它，而此时你的应用可能还在生成下一个数据项。
+
+<img src="https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-18%2016.35.24.png" alt="截屏2026-06-18 16.35.24" style="zoom:50%;" />
+
+它甚至可以是一个无限流，你可以一直持续发送数据。
+
+### JSON Lines
+
+在这些场景中，常见的做法是发送 “JSON Lines”，这是一种每行发送一个 JSON 对象的格式。
+
+响应的内容类型是 `application/jsonl`（而不是 `application/json`），响应体类似这样：
+
+```json
+{"name": "Plumbus", "description": "A multi-purpose household device."}
+{"name": "Portal Gun", "description": "A portal opening device."}
+{"name": "Meeseeks Box", "description": "A box that summons a Meeseeks."}
+```
+
+它与 JSON 数组（相当于 Python 的 list）非常相似，但不是用 `[]` 包裹、并在各项之间使用 `,` 分隔，而是每行一个 JSON 对象，彼此以换行符分隔。
+
+
+
+### 使用场景
+
+你可以用它来从 AI LLM 服务、日志或遥测中流式传输数据，或其他可以用 JSON 项目来结构化的数据。
+
+## 使用 FastAPI 流式传输 JSON Lines
+
+要在 FastAPI 中流式传输 JSON Lines，可以在路径操作函数中不用 `return`，而是用 `yield` 逐个产生每个数据项。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/stream-json-lines/#__tabbed_1_1)
+
+```python
+from collections.abc import AsyncIterable, Iterable
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    description: str | None
+
+
+items = [
+    Item(name="Plumbus", description="A multi-purpose household device."),
+    Item(name="Portal Gun", description="A portal opening device."),
+    Item(name="Meeseeks Box", description="A box that summons a Meeseeks."),
+]
+
+
+@app.get("/items/stream")
+async def stream_items() -> AsyncIterable[Item]:
+    for item in items:
+        yield item
+
+# Code below omitted 👇
+```
+
+如果你要返回的每个 JSON 项是类型 `Item`（一个 Pydantic 模型），并且这是一个异步函数，你可以将返回类型声明为 `AsyncIterable[Item]`：
+
+```python
+class Item(BaseModel):
+    name: str
+    description: str | None
+    
+async def stream_items() -> AsyncIterable[Item]:
+```
+
+如果你声明了返回类型，FastAPI 会用它来验证数据、在 OpenAPI 中生成文档、进行过滤，并使用 Pydantic 进行序列化。
+
+
+
+#### 非异步的*路径操作函数*
+
+你也可以使用常规的 `def` 函数（不带 `async`），并以同样的方式使用 `yield`。
+
+FastAPI 会确保其正确运行，不会阻塞事件循环。
+
+因为这个函数不是异步的，合适的返回类型是 `Iterable[Item]`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/stream-json-lines/#__tabbed_5_1)
+
+```python
+# Code above omitted 👆
+
+@app.get("/items/stream-no-async")
+def stream_items_no_async() -> Iterable[Item]:
+    for item in items:
+        yield item
+
+# Code below omitted 👇
+```
+
+
+
+#### 无返回类型
+
+你也可以省略返回类型。此时 FastAPI 会使用 [`jsonable_encoder`](https://fastapi.tiangolo.com/zh/tutorial/encoder/) 将数据转换为可序列化为 JSON 的形式，然后以 JSON Lines 发送。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/stream-json-lines/#__tabbed_7_1)
+
+```python
+# Code above omitted 👆
+
+@app.get("/items/stream-no-annotation")
+async def stream_items_no_annotation():
+    for item in items:
+        yield item
+
+# Code below omitted 👇
+```
+
+
+
+### 服务器发送事件（SSE）
+
+FastAPI 还对 Server-Sent Events（SSE）提供一等支持，它们与此非常相似，但有一些额外细节。你可以在下一章了解更多：[服务器发送事件（SSE）](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/)。🤓
+
+
+
+
+
+---
+
+----
+
+## 服务器发送事件（SSE）
+
+你可以使用服务器发送事件（SSE）向客户端流式发送数据。
+
+这类似于流式传输JSON L ines，但使用`text/event_stram`格式，浏览器原生通过EventSource API支持。
+
+
+
+### 什么是服务器发送事件？
+
+SSE 是一种通过 HTTP 从服务器向客户端流式传输数据的标准。
+
+每个事件是一个带有 `data`、`event`、`id` 和 `retry` 等“字段”的小文本块，以空行分隔。
+
+看起来像这样：
+
+```python
+data: {"name": "Portal Gun", "price": 999.99}
+
+data: {"name": "Plumbus", "price": 32.99}
+```
+
+SSE 常用于 AI 聊天流式输出、实时通知、日志与可观测性，以及其他服务器向客户端推送更新的场景。
+
+## 使用 FastAPI 流式传输 SSE
+
+要在 FastAPI 中流式传输 SSE，在你的*路径操作函数*中使用 `yield`，并设置 `response_class=EventSourceResponse`。
+
+从 `fastapi.sse` 导入 `EventSourceResponse`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_1_1)
+
+```python
+from collections.abc import AsyncIterable, Iterable
+
+from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    description: str | None
+
+
+items = [
+    Item(name="Plumbus", description="A multi-purpose household device."),
+    Item(name="Portal Gun", description="A portal opening device."),
+    Item(name="Meeseeks Box", description="A box that summons a Meeseeks."),
+]
+
+
+@app.get("/items/stream", response_class=EventSourceResponse)
+async def sse_items() -> AsyncIterable[Item]:
+    for item in items:
+        yield item
+
+
+@app.get("/items/stream-no-async", response_class=EventSourceResponse)
+def sse_items_no_async() -> Iterable[Item]:
+    for item in items:
+        yield item
+
+
+@app.get("/items/stream-no-annotation", response_class=EventSourceResponse)
+async def sse_items_no_annotation():
+    for item in items:
+        yield item
+
+
+@app.get("/items/stream-no-async-no-annotation", response_class=EventSourceResponse)
+def sse_items_no_async_no_annotation():
+    for item in items:
+        yield item
+```
+
+每个被 yield 的项会被编码为 JSON，并放入 SSE 事件的 `data:` 字段发送。
+
+如果你将返回类型声明为 `AsyncIterable[Item]`，FastAPI 将使用它通过 Pydantic对数据进行**校验**、**文档化**和**序列化**。
+
+```python
+class Item(BaseModel):
+    name: str
+    description: str | None
+    
+async def sse_items() -> AsyncIterable[Item]:
+```
+
+
+
+> 🔥 提示
+>
+> 由于 Pydantic 会在**Rust** 端序列化它，相比未声明返回类型，你将获得更高的**性能**。
+
+#### 非 async 的*路径操作函数*
+
+你也可以使用常规的 `def` 函数（没有 `async`），并以同样的方式使用 `yield`。
+
+FastAPI 会确保其正确运行，从而不阻塞事件循环。
+
+由于此时函数不是 async，正确的返回类型应为 `Iterable[Item]`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_5_1)
+
+```python
+# Code above omitted 👆
+
+@app.get("/items/stream-no-async", response_class=EventSourceResponse)
+def sse_items_no_async() -> Iterable[Item]:
+    for item in items:
+        yield item
+
+# Code below omitted 👇
+```
+
+
+
+#### 无返回类型
+
+你也可以省略返回类型。FastAPI 将使用 [`jsonable_encoder`](https://fastapi.tiangolo.com/zh/tutorial/encoder/) 转换数据并发送。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_7_1)
+
+```python
+# Code above omitted 👆
+
+@app.get("/items/stream-no-annotation", response_class=EventSourceResponse)
+async def sse_items_no_annotation():
+    for item in items:
+        yield item
+
+# Code below omitted 👇
+```
+
+
+
+### `ServerSentEvent`
+
+如果你需要设置 `event`、`id`、`retry` 或 `comment` 等 SSE 字段，你可以 yield `ServerSentEvent` 对象，而不是直接返回数据。
+
+从 `fastapi.sse` 导入 `ServerSentEvent`：
+
+```python 
+from collections.abc import AsyncIterable
+
+from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    price: float
+
+
+items = [
+    Item(name="Plumbus", price=32.99),
+    Item(name="Portal Gun", price=999.99),
+    Item(name="Meeseeks Box", price=49.99),
+]
+
+
+@app.get("/items/stream", response_class=EventSourceResponse)
+async def stream_items() -> AsyncIterable[ServerSentEvent]:
+    yield ServerSentEvent(comment="stream of item updates")
+    for i, item in enumerate(items):
+        yield ServerSentEvent(data=item, event="item_update", id=str(i + 1), retry=5000)
+```
+
+
+
+\`data` 字段始终会被编码为 JSON。你可以传入任何可被序列化为 JSON 的值，包括 Pydantic 模型。
+
+### 原始数据
+
+如果你需要发送**不**进行 JSON 编码的数据，请使用 `raw_data` 而不是 `data`。
+
+这对于发送预格式化文本、日志行或特殊的 "哨兵" 值（例如 `[DONE]`）很有用。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_10_1)
+
+```python
+from collections.abc import AsyncIterable
+
+from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+
+app = FastAPI()
+
+
+@app.get("/logs/stream", response_class=EventSourceResponse)
+async def stream_logs() -> AsyncIterable[ServerSentEvent]:
+    logs = [
+        "2025-01-01 INFO  Application started",
+        "2025-01-01 DEBUG Connected to database",
+        "2025-01-01 WARN  High memory usage detected",
+    ]
+    for log_line in logs:
+        yield ServerSentEvent(raw_data=log_line)
+```
+
+
+
+### 使用 `Last-Event-ID` 恢复
+
+当连接中断后浏览器重新连接时，会在 `Last-Event-ID` 头中发送上次收到的 `id`。
+
+你可以将其读取为一个请求头参数，并据此从客户端离开的地方恢复流：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_11_1)
+
+```python
+from collections.abc import AsyncIterable
+from typing import Annotated
+
+from fastapi import FastAPI, Header
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    price: float
+
+
+items = [
+    Item(name="Plumbus", price=32.99),
+    Item(name="Portal Gun", price=999.99),
+    Item(name="Meeseeks Box", price=49.99),
+]
+
+
+@app.get("/items/stream", response_class=EventSourceResponse)
+async def stream_items(
+    last_event_id: Annotated[int | None, Header()] = None,
+) -> AsyncIterable[ServerSentEvent]:
+    start = last_event_id + 1 if last_event_id is not None else 0
+    for i, item in enumerate(items):
+        if i < start:
+            continue
+        yield ServerSentEvent(data=item, id=str(i))
+```
+
+### 使用 POST 的 SSE
+
+SSE 适用于**任意 HTTP 方法**，不仅仅是 `GET`。
+
+这对像 [MCP](https://modelcontextprotocol.io/) 这样通过 `POST` 传输 SSE 的协议很有用：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/server-sent-events/#__tabbed_12_1)
+
+```python
+from collections.abc import AsyncIterable
+
+from fastapi import FastAPI
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from pydantic import BaseModel
+
+app = FastAPI()
+
+
+class Prompt(BaseModel):
+    text: str
+
+
+@app.post("/chat/stream", response_class=EventSourceResponse)
+async def stream_chat(prompt: Prompt) -> AsyncIterable[ServerSentEvent]:
+    words = prompt.text.split()
+    for word in words:
+        yield ServerSentEvent(data=word, event="token")
+    yield ServerSentEvent(raw_data="[DONE]", event="done")
+```
+
+
+
+### 技术细节
+
+FastAPI 开箱即用地实现了一些 SSE 的最佳实践。
+
+- 当 15 秒内没有任何消息时，发送一个**保活 `ping` 注释**，以防某些代理关闭连接，正如 [HTML 规范：Server-Sent Events](https://html.spec.whatwg.org/multipage/server-sent-events.html#authoring-notes) 中建议的那样。
+- 设置 `Cache-Control: no-cache` 响应头，**防止缓存**流。
+- 设置特殊响应头 `X-Accel-Buffering: no`，以**防止**某些代理（如 Nginx）**缓冲**。
+
+你无需做任何事，它开箱即用。🤓
+
+
+
+
+
+
+
+----
+
+## 后台任务
+
+你可以定义在返回响应后运行的后台任务。
+
+这对需要在请求之后执行的操作很有用，但客户端不必在接收响应之前等待操作完成。
+
+包括这些例子：
+
+- 执行操作后发送的电子邮件通知：
+  - 由于连接到电子邮件服务器并发送电子邮件往往很“慢”（几秒钟），您可以立即返回响应并在后台发送电子邮件通知。
+- 处理数据：
+  - 例如，假设您收到的文件必须经过一个缓慢的过程，您可以返回一个"Accepted"(HTTP 202)响应并在后台处理它。
+
+
+
+### 使用 `BackgroundTasks`
+
+首先导入 `BackgroundTasks` 并在 *路径操作函数* 中使用类型声明 `BackgroundTasks` 定义一个参数：
+
+```python
+from fastapi import BackgroundTasks, FastAPI
+
+app = FastAPI()
+
+
+def write_notification(email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_notification, email, message="some notification")
+    return {"message": "Notification sent in the background"}
+```
+
+
+
+**FastAPI** 会创建一个 `BackgroundTasks` 类型的对象并作为该参数传入。
+
+
+
+### 创建一个任务函数
+
+创建要作为后台任务运行的函数。
+
+它只是一个可以接收参数的标准函数。
+
+它可以是 `async def` 或普通的 `def` 函数，**FastAPI** 知道如何正确处理。
+
+在这种情况下，任务函数将写入一个文件（模拟发送电子邮件）。
+
+由于写操作不使用 `async` 和 `await`，我们用普通的 `def` 定义函数：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/background-tasks/#__tabbed_2_1)
+
+```python
+from fastapi import BackgroundTasks, FastAPI
+
+app = FastAPI()
+
+
+def write_notification(email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_notification, email, message="some notification")
+    return {"message": "Notification sent in the background"}
+```
+
+
+
+### 添加后台任务
+
+在你的 *路径操作函数* 里，用 `.add_task()` 方法将任务函数传到 *后台任务* 对象中：
+
+
+
+```python
+from fastapi import BackgroundTasks, FastAPI
+
+app = FastAPI()
+
+
+def write_notification(email: str, message=""):
+    with open("log.txt", mode="w") as email_file:
+        content = f"notification for {email}: {message}"
+        email_file.write(content)
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(email: str, background_tasks: BackgroundTasks):
+    background_tasks.add_task(write_notification, email, message="some notification")
+    return {"message": "Notification sent in the background"}
+```
+
+`.add_task()` 接收以下参数：
+
+- 在后台运行的任务函数(`write_notification`)。
+- 应按顺序传递给任务函数的任意参数序列(`email`)。
+- 应传递给任务函数的任意关键字参数(`message="some notification"`)。
+
+
+
+
+
+### 依赖注入
+
+使用 `BackgroundTasks` 也适用于依赖注入系统，你可以在多个级别声明 `BackgroundTasks` 类型的参数：在 *路径操作函数* 里，在依赖中(可依赖)，在子依赖中，等等。
+
+**FastAPI** 知道在每种情况下该做什么以及如何复用同一对象，因此所有后台任务被合并在一起并且随后在后台运行：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/background-tasks/#__tabbed_4_1)
+
+```python
+from typing import Annotated
+
+from fastapi import BackgroundTasks, Depends, FastAPI
+
+app = FastAPI()
+
+
+def write_log(message: str):
+    with open("log.txt", mode="a") as log:
+        log.write(message)
+
+
+def get_query(background_tasks: BackgroundTasks, q: str | None = None):
+    if q:
+        message = f"found query: {q}\n"
+        background_tasks.add_task(write_log, message)
+    return q
+
+
+@app.post("/send-notification/{email}")
+async def send_notification(
+    email: str, background_tasks: BackgroundTasks, q: Annotated[str, Depends(get_query)]
+):
+    message = f"message to {email}\n"
+    background_tasks.add_task(write_log, message)
+    return {"message": "Message sent"}
+```
+
+该示例中，信息会在响应发出 *之后* 被写到 `log.txt` 文件。
+
+如果请求中有查询，它将在后台任务中写入日志。
+
+然后另一个在 *路径操作函数* 生成的后台任务会使用路径参数 `email` 写入一条信息。
+
+
+
+### 技术细节
+
+`BackgroundTasks` 类直接来自 [`starlette.background`](https://www.starlette.dev/background/)。
+
+它被直接导入/包含到FastAPI以便你可以从 `fastapi` 导入，并避免意外从 `starlette.background` 导入备用的 `BackgroundTask` (后面没有 `s`)。
+
+通过仅使用 `BackgroundTasks` (而不是 `BackgroundTask`)，使得能将它作为 *路径操作函数* 的参数 ，并让**FastAPI**为您处理其余部分, 就像直接使用 `Request` 对象。
+
+在FastAPI中仍然可以单独使用 `BackgroundTask`，但您必须在代码中创建对象，并返回包含它的Starlette `Response`。
+
+
+
+### 告诫
+
+如果您需要执行繁重的后台计算，并且不一定需要由同一进程运行（例如，您不需要共享内存、变量等），那么使用其他更大的工具（如 [Celery](https://docs.celeryq.dev/)）可能更好。
+
+它们往往需要更复杂的配置，即消息/作业队列管理器，如RabbitMQ或Redis，但它们允许您在多个进程中运行后台任务，甚至是在多个服务器中。
+
+但是，如果您需要从同一个**FastAPI**应用程序访问变量和对象，或者您需要执行小型后台任务（如发送电子邮件通知），您只需使用 `BackgroundTasks` 即可。
+
+
+
+### 回顾
+
+导入并使用 `BackgroundTasks` 通过 *路径操作函数* 中的参数和依赖项来添加后台任务。
+
+
+
+
+
+
+
+----
+
+----
+
+## 元数据和文档URL
+
+你可以在 FastAPI 应用程序中自定义多个元数据配置。
+
+### API 元数据
+
+你可以在设置 OpenAPI 规范和自动 API 文档 UI 中使用的以下字段：
+
+| 参数               | 类型     | 描述                                                         |
+| :----------------- | :------- | :----------------------------------------------------------- |
+| `title`            | `str`    | API 的标题。                                                 |
+| `summary`          | `str`    | API 的简短摘要。 自 OpenAPI 3.1.0、FastAPI 0.99.0 起可用。   |
+| `description`      | `str`    | API 的简短描述。可以使用 Markdown。                          |
+| `version`          | `string` | API 的版本。这是您自己的应用程序的版本，而不是 OpenAPI 的版本。例如 `2.5.0`。 |
+| `terms_of_service` | `str`    | API 服务条款的 URL。如果提供，则必须是 URL。                 |
+| `contact`          | `dict`   | 公开的 API 的联系信息。它可以包含多个字段。                  |
+| `license_info`     | `dict`   | 公开的 API 的许可证信息。它可以包含多个字段。                |
+
+你可以按如下方式设置它们：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/metadata/#__tabbed_1_1)
+
+```python
+from fastapi import FastAPI
+
+description = """
+ChimichangApp API helps you do awesome stuff. 🚀
+
+## Items
+
+You can **read items**.
+
+## Users
+
+You will be able to:
+
+* **Create users** (_not implemented_).
+* **Read users** (_not implemented_).
+"""
+
+app = FastAPI(
+    title="ChimichangApp",
+    description=description,
+    summary="Deadpool's favorite app. Nuff said.",
+    version="0.0.1",
+    terms_of_service="http://example.com/terms/",
+    contact={
+        "name": "Deadpoolio the Amazing",
+        "url": "http://x-force.example.com/contact/",
+        "email": "dp@x-force.example.com",
+    },
+    license_info={
+        "name": "Apache 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+    },
+)
+
+
+@app.get("/items/")
+async def read_items():
+    return [{"name": "Katana"}]
+```
+
+> 🔥 提示
+>
+> 你可以在 `description` 字段中编写 Markdown，它会在输出中渲染。
+
+通过这样设置，自动 API 文档看起来会像：
+
+<img src="https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-25%2013.39.35.png" alt="截屏2026-06-25 13.39.35" style="zoom: 33%;" />
+
+### 许可证标识符
+
+自 OpenAPI 3.1.0 和 FastAPI 0.99.0 起，你还可以在 `license_info` 中使用 `identifier` 而不是 `url`。
+
+例如：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/metadata/#__tabbed_2_1)
+
+```python
+from fastapi import FastAPI
+
+description = """
+ChimichangApp API helps you do awesome stuff. 🚀
+
+## Items
+
+You can **read items**.
+
+## Users
+
+You will be able to:
+
+* **Create users** (_not implemented_).
+* **Read users** (_not implemented_).
+"""
+
+app = FastAPI(
+    title="ChimichangApp",
+    description=description,
+    summary="Deadpool's favorite app. Nuff said.",
+    version="0.0.1",
+    terms_of_service="http://example.com/terms/",
+    contact={
+        "name": "Deadpoolio the Amazing",
+        "url": "http://x-force.example.com/contact/",
+        "email": "dp@x-force.example.com",
+    },
+    license_info={
+        "name": "Apache 2.0",
+        "identifier": "Apache-2.0",
+    },
+)
+
+
+@app.get("/items/")
+async def read_items():
+    return [{"name": "Katana"}]
+```
+
+
+
+### 标签元数据
+
+你也可以通过参数 `openapi_tags` 为用于分组路径操作的不同标签添加额外的元数据。
+
+它接收一个列表，列表中每个标签对应一个字典。
+
+每个字典可以包含：
+
+- `name`（必填）：一个 `str`，与在你的*路径操作*和 `APIRouter` 的 `tags` 参数中使用的标签名相同。
+- `description`：一个 `str`，该标签的简短描述。可以使用 Markdown，并会显示在文档 UI 中。
+- `externalDocs`：一个 `dict`，描述外部文档，包含：
+  - `description`：一个 `str`，该外部文档的简短描述。
+  - `url`（必填）：一个 `str`，该外部文档的 URL。
+
+
+
+
+
+#### 创建标签元数据
+
+让我们在带有标签的示例中为 `users` 和 `items` 试一下。
+
+创建标签元数据并把它传递给 `openapi_tags` 参数：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/metadata/#__tabbed_3_1)
+
+```python
+from fastapi import FastAPI
+
+tags_metadata = [
+    {
+        "name": "users",
+        "description": "Operations with users. The **login** logic is also here.",
+    },
+    {
+        "name": "items",
+        "description": "Manage items. So _fancy_ they have their own docs.",
+        "externalDocs": {
+            "description": "Items external docs",
+            "url": "https://fastapi.tiangolo.com/",
+        },
+    },
+]
+
+app = FastAPI(openapi_tags=tags_metadata)
+
+
+@app.get("/users/", tags=["users"])
+async def get_users():
+    return [{"name": "Harry"}, {"name": "Ron"}]
+
+
+@app.get("/items/", tags=["items"])
+async def get_items():
+    return [{"name": "wand"}, {"name": "flying broom"}]
+```
+
+注意你可以在描述内使用 Markdown，例如「login」会显示为粗体（**login**）以及「fancy」会显示为斜体（*fancy*）。
+
+
+
+> 🔥 提示
+>
+> 不必为你使用的所有标签都添加元数据。
+
+
+
+#### 使用你的标签
+
+将 `tags` 参数和*路径操作*（以及 `APIRouter`）一起使用，将其分配给不同的标签：
+
+```python
+from fastapi import FastAPI
+
+tags_metadata = [
+    {
+        "name": "users",
+        "description": "Operations with users. The **login** logic is also here.",
+    },
+    {
+        "name": "items",
+        "description": "Manage items. So _fancy_ they have their own docs.",
+        "externalDocs": {
+            "description": "Items external docs",
+            "url": "https://fastapi.tiangolo.com/",
+        },
+    },
+]
+
+app = FastAPI(openapi_tags=tags_metadata)
+
+
+@app.get("/users/", tags=["users"])
+async def get_users():
+    return [{"name": "Harry"}, {"name": "Ron"}]
+
+
+@app.get("/items/", tags=["items"])
+async def get_items():
+    return [{"name": "wand"}, {"name": "flying broom"}]
+```
+
+
+
+#### 查看文档
+
+如果你现在查看文档，它们会显示所有附加的元数据：
+
+<img src="https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-25%2013.53.01.png" alt="截屏2026-06-25 13.53.01" style="zoom:67%;" />
+
+#### 标签顺序
+
+每个标签元数据字典的顺序也定义了在文档用户界面显示的顺序。
+
+例如按照字母顺序，即使 `users` 排在 `items` 之后，它也会显示在前面，因为我们将它的元数据添加为列表内的第一个字典。
+
+
+
+### OpenAPI URL
+
+默认情况下，OpenAPI 模式服务于 `/openapi.json`。
+
+但是你可以通过参数 `openapi_url` 对其进行配置。
+
+例如，将其设置为服务于 `/api/v1/openapi.json`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/metadata/#__tabbed_5_1)
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI(openapi_url="/api/v1/openapi.json")
+
+
+@app.get("/items/")
+async def read_items():
+    return [{"name": "Foo"}]
+```
+
+如果你想完全禁用 OpenAPI 模式，可以将其设置为 `openapi_url=None`，这样也会禁用使用它的文档用户界面。
+
+
+
+### 文档 URLs
+
+你可以配置两个文档用户界面，包括：
+
+- **Swagger UI**：服务于 `/docs`。
+  - 可以使用参数 `docs_url` 设置它的 URL。
+  - 可以通过设置 `docs_url=None` 禁用它。
+- **ReDoc**：服务于 `/redoc`。
+  - 可以使用参数 `redoc_url` 设置它的 URL。
+  - 可以通过设置 `redoc_url=None` 禁用它。
+
+例如，设置 Swagger UI 服务于 `/documentation` 并禁用 ReDoc：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/metadata/#__tabbed_6_1)
+
+```python 
+from fastapi import FastAPI
+
+app = FastAPI(docs_url="/documentation", redoc_url=None)
+
+
+@app.get("/items/")
+async def read_items():
+    return [{"name": "Foo"}]
+```
+
+
+
+
+
+----
+
+---
+
+## 前端
+
+你可以使用 `app.frontend()` （或 `router.frontend()` ）来提供静态前端应用。
+
+这对于生成静态文件的前端工具非常有用，例如 React with Vite、TanStack Router、Astro、Vue、Svelte、Angular、Solid 等。
+
+使用这些工具时，通常会有一个构建前端的步骤，例如使用以下命令：
+
+```bash
+npm run build
+```
+
+这样就会生成一个类似`./dist/`前端文件所在的目录。
+
+您可以`app.frontend()`按照这些前端框架所需的约定来使用该目录。
+
+**FastAPI**首先检查*路径操作*。只有当没有匹配的常规路由时才会检查前端文件，因此您的 API 不会受到影响。
+
+
+
+### 负责前端开发工作
+
+在用 `npm run build` 等工具构建好前端之后，把生成的文件放入某个目录中，比如 `dist` 
+
+
+
+您的项目结构可能如下所示：
+
+```bash
+.
+├── pyproject.toml
+├── app
+│   ├── __init__.py
+│   └── main.py
+└── dist
+    ├── index.html
+    └── assets
+        └── app.js
+```
+
+然后搭配 `app.frontend()` 一起使用：
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist")
+```
+
+这样，就`/assets/app.js`可以发出请求`dist/assets/app.js`。
+
+如果同时存在**FastAPI** *路径操作*，则*路径操作*优先。
+
+
+
+### 客户端路由
+
+许多前端应用，包括**单页应用**（SPA），都使用客户端路由。类似这样的路径`/dashboard/settings`可能并非指向实际的文件，但框架会负责处理它。
+
+因此，如果直接访问该 URL（而不是通过应用程序导航），后端应该从该 URL 提供前端应用程序`index.html`，以便前端框架可以处理客户端路由。
+
+为此，请使用`fallback="index.html"`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/tutorial/frontend/#__tabbed_2_1)
+
+```
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist", fallback="index.html")
+```
+
+**FastAPI**仅对类似浏览器导航的请求使用此回退方案。缺少 JavaScript、CSS 和图像等文件的情况仍然会返回结果0`404`。
+
+
+
+>🔥 提示
+>
+>默认`fallback`值为`fallback="auto"`。大多数情况下，您无需指定`fallback`。详情请阅读下文。
+
+
+
+对于许多使用客户端路由的前端应用程序来说，这正是你想要的，例如 React 与 TanStack Router、Vue、Angular、SvelteKit 或 Solid。
+
+
+
+### 自定义 404 页面
+
+您还可`404.html`以为缺失的前端路径提供静态页面：
+
+[Python 3.10+](https://fastapi.tiangolo.com/tutorial/frontend/#__tabbed_3_1)
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist", fallback="404.html")
+```
+
+该响应保持状态码为`404`。
+
+在这种情况下，**FastAPI**将不会处理`index.html`缺失的前端路径，而是`404.html`直接返回文件。
+
+
+
+> 🔥 提示
+>
+> 默认`fallback`值为`fallback="auto"`。这样，如果`404.html`找到文件，则会自动将其用作备用文件。
+>
+> 所以，通常情况下可以省略`fallback`参数。
+
+这对于像 Astro 这样为每个页面生成静态 HTML 文件的前端工具非常有用。
+
+
+
+### 自动回退
+
+默认情况下，`app.frontend()`使用`fallback="auto"`。
+
+`404.html`如果前端目录中存在文件，则缺少前端路径时，将以状态码提供该文件`404`。
+
+否则，如果存在`index.html`文件，则缺少浏览器导航路径`index.html`，这是许多具有客户端路由的前端应用程序所期望的。
+
+`app.frontend("/", directory="dist")`因此，大多数情况下无需指定参数即可使用`fallback`。
+
+
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist")
+```
+
+
+
+### 禁用回退
+
+如果您不想为缺失的前端路径提供备用文件，请使用`fallback=None`：
+
+
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist", fallback=None)
+```
+
+然后，缺少前端路径时，返回正常结果`404`。
+
+
+
+### 查看目录
+
+默认情况下，`app.frontend()`在创建应用程序时检查目录是否存在。
+
+这有助于及早发现配置错误。例如，如果前端构建输出目录缺失，**FastAPI**将在启动时引发错误。
+
+如果您的前端文件是稍后创建的，例如在创建应用程序对象之后通过单独的构建步骤创建，请设置`check_dir=False`：
+
+```python
+from fastapi import FastAPI
+
+app = FastAPI()
+
+app.frontend("/", directory="dist", check_dir=False)
+```
+
+启用此功能后`check_dir=False`，**FastAPI**在创建应用时将不会检查目录。如果在处理请求时配置的目录仍然缺失，**FastAPI**将抛出错误。
+
+
+
+### 配合使用`APIRouter`
+
+您还可以将前端文件添加到 `<head>` 标签中`APIRouter`，并使用前缀将其包含进来：
+
+```python
+from fastapi import APIRouter, FastAPI
+
+app = FastAPI()
+router = APIRouter()
+
+router.frontend("/", directory="dist", fallback="index.html")
+app.include_router(router, prefix="/app")
+```
+
+在这个例子中，前端路径由以下方式提供服务`/app`：
+
+应用程序中任何常规*路径操作*仍将优先执行，包括在其他路由器上的操作。
+
+
+
+### 仅静态构建输出
+
+`app.frontend()`提供前端构建已生成的文件。
+
+它不支持服务器端渲染。它是为生成静态文件的前端框架设计的，而不是为那些需要针对每个请求在服务器端进行动态渲染的框架设计的。
+
+
+
+---
+
+---
+
+## 静态文件
+
+你可以使用StaticFiles从目录中提供静态文件
+
+
+
+### 使用 `StaticFiles`
+
+- 导入 `StaticFiles`。
+- 将一个 `StaticFiles()` 实例“挂载”（Mount）到指定路径。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/static-files/#__tabbed_1_1)
+
+```python
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+app = FastAPI()
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+```
+
+
+
+> ✏️ 技术细节
+>
+> 你也可以用 `from starlette.staticfiles import StaticFiles`。
+>
+> **FastAPI** 提供了和 `starlette.staticfiles` 相同的 `fastapi.staticfiles`，只是为了方便你这个开发者。但它确实直接来自 Starlette。
+
+
+
+#### 什么是“挂载”（Mounting）
+
+“挂载”表示在特定路径添加一个完全“独立”的应用，然后负责处理所有子路径。
+
+这与使用 `APIRouter` 不同，因为挂载的应用是完全独立的。主应用的 OpenAPI 和文档不会包含已挂载应用的任何内容，等等。
+
+你可以在[高级用户指南](https://fastapi.tiangolo.com/zh/advanced/)中了解更多。
+
+
+
+### 细节
+
+第一个 `"/static"` 指的是这个“子应用”将被“挂载”到的子路径。因此，任何以 `"/static"` 开头的路径都会由它处理。
+
+`directory="static"` 指的是包含你的静态文件的目录名称。
+
+`name="static"` 为它提供了一个可被 **FastAPI** 内部使用的名称。
+
+这些参数都可以不是“`static`”，请根据你的应用需求和具体细节进行调整。
+
+
+
+### 更多信息
+
+更多细节和选项请查阅 [Starlette 的静态文件文档](https://www.starlette.dev/staticfiles/)。
+
+
+
+
+
+
+
+---
+
+---
+
+## 测试
+
+感谢 [Starlette](https://www.starlette.dev/testclient/)，测试**FastAPI** 应用轻松又愉快。
+
+它基于 [HTTPX](https://www.python-httpx.org/)，而HTTPX又是基于Requests设计的，所以很相似且易懂。
+
+有了它，你可以直接与**FastAPI**一起使用 [pytest](https://docs.pytest.org/)。
+
+
+
+### 使用TestClien
+
+> ⚠️ 注意
+>
+> 要使用 `TestClient`，先要安装 [`httpx`](https://www.python-httpx.org/)。
+>
+> 确保你创建并激活一个[虚拟环境](https://fastapi.tiangolo.com/zh/virtual-environments/)，然后再安装，例如：
+>
+> ```bash
+> $ pip install httpx
+> ```
+
+
+
+导入 `TestClient`。
+
+通过传入你的**FastAPI**应用创建一个 `TestClient` 。
+
+创建名字以 `test_` 开头的函数（这是标准的 `pytest` 约定）。
+
+像使用 `httpx` 那样使用 `TestClient` 对象。
+
+为你需要检查的地方用标准的Python表达式写个简单的 `assert` 语句（重申，标准的`pytest`）。
+
+```python
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+app = FastAPI()
+
+
+@app.get("/")
+async def read_main():
+    return {"msg": "Hello World"}
+
+
+client = TestClient(app)
+
+
+def test_read_main():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"msg": "Hello World"}
+```
+
+
+
+> 🔥 提示
+>
+> 注意测试函数是普通的 `def`，不是 `async def`。
+>
+> 还有client的调用也是普通的调用，不是用 `await`。
+>
+> 这让你可以直接使用 `pytest` 而不会遇到麻烦。
+
+> ✒️ 技术细节
+>
+> 你也可以用 `from starlette.testclient import TestClient`。
+>
+> **FastAPI** 提供了和 `starlette.testclient` 一样的 `fastapi.testclient`，只是为了方便开发者。但它直接来自Starlette。
+
+
+
+> 🔥 提示
+>
+> 除了发送请求之外，如果你还想测试时在FastAPI应用中调用 `async` 函数（例如异步数据库函数）， 可以在高级教程中看下 [Async Tests](https://fastapi.tiangolo.com/zh/advanced/async-tests/) 。
+
+
+
+### 分离测试
+
+在实际应用中，你可能会把你的测试放在另一个文件里。
+
+您的**FastAPI**应用程序也可能由一些文件/模块组成等等。
+
+
+
+#### **FastAPI** app 文件
+
+假设你有一个像[更大的应用](https://fastapi.tiangolo.com/zh/tutorial/bigger-applications/)中所描述的文件结构:
+
+```
+.
+├── app
+│   ├── __init__.py
+│   └── main.py
+```
+
+在 `main.py` 文件中你有一个 **FastAPI** app:
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/testing/#__tabbed_2_1)
+
+```
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+async def read_main():
+    return {"msg": "Hello World"}
+```
+
+
+
+#### 测试文件
+
+然后你会有一个包含测试的文件 `test_main.py` 。app可以像Python包那样存在（一样是目录，但有个 `__init__.py` 文件）：
+
+```
+.
+├── app
+│   ├── __init__.py
+│   ├── main.py
+│   └── test_main.py
+```
+
+因为这文件在同一个包中，所以你可以通过相对导入从 `main` 模块（`main.py`）导入`app`对象：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/testing/#__tabbed_3_1)
+
+```python
+from fastapi.testclient import TestClient
+
+from .main import app
+
+client = TestClient(app)
+
+
+def test_read_main():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"msg": "Hello World"}
+```
+
+...然后测试代码和之前一样的。
+
+
+
+### 测试：扩展示例
+
+现在让我们扩展这个例子，并添加更多细节，看下如何测试不同部分。
+
+#### 扩展后的 **FastAPI** app 文件
+
+让我们继续之前的文件结构：
+
+```
+.
+├── app
+│   ├── __init__.py
+│   ├── main.py
+│   └── test_main.py
+```
+
+假设现在包含**FastAPI** app的文件 `main.py` 有些其他**路径操作**。
+
+有个 `GET` 操作会返回错误。
+
+有个 `POST` 操作会返回一些错误。
+
+所有*路径操作* 都需要一个`X-Token` 头。
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/testing/#__tabbed_4_1)
+
+```python
+from typing import Annotated
+
+from fastapi import FastAPI, Header, HTTPException
+from pydantic import BaseModel
+
+fake_secret_token = "coneofsilence"
+
+fake_db = {
+    "foo": {"id": "foo", "title": "Foo", "description": "There goes my hero"},
+    "bar": {"id": "bar", "title": "Bar", "description": "The bartenders"},
+}
+
+app = FastAPI()
+
+
+class Item(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+
+
+@app.get("/items/{item_id}", response_model=Item)
+async def read_main(item_id: str, x_token: Annotated[str, Header()]):
+    if x_token != fake_secret_token:
+        raise HTTPException(status_code=400, detail="Invalid X-Token header")
+    if item_id not in fake_db:
+        raise HTTPException(status_code=404, detail="Item not found")
+    return fake_db[item_id]
+
+
+@app.post("/items/")
+async def create_item(item: Item, x_token: Annotated[str, Header()]) -> Item:
+    if x_token != fake_secret_token:
+        raise HTTPException(status_code=400, detail="Invalid X-Token header")
+    if item.id in fake_db:
+        raise HTTPException(status_code=409, detail="Item already exists")
+    fake_db[item.id] = item.model_dump()
+    return item
+```
+
+
+
+#### 扩展后的测试文件
+
+然后您可以使用扩展后的测试更新`test_main.py`：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/testing/#__tabbed_6_1)
+
+```python
+from fastapi.testclient import TestClient
+
+from .main import app
+
+client = TestClient(app)
+
+
+def test_read_item():
+    response = client.get("/items/foo", headers={"X-Token": "coneofsilence"})
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "foo",
+        "title": "Foo",
+        "description": "There goes my hero",
+    }
+
+
+def test_read_item_bad_token():
+    response = client.get("/items/foo", headers={"X-Token": "hailhydra"})
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid X-Token header"}
+
+
+def test_read_nonexistent_item():
+    response = client.get("/items/baz", headers={"X-Token": "coneofsilence"})
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Item not found"}
+
+
+def test_create_item():
+    response = client.post(
+        "/items/",
+        headers={"X-Token": "coneofsilence"},
+        json={"id": "foobar", "title": "Foo Bar", "description": "The Foo Barters"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": "foobar",
+        "title": "Foo Bar",
+        "description": "The Foo Barters",
+    }
+
+
+def test_create_item_bad_token():
+    response = client.post(
+        "/items/",
+        headers={"X-Token": "hailhydra"},
+        json={"id": "bazz", "title": "Bazz", "description": "Drop the bazz"},
+    )
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Invalid X-Token header"}
+
+
+def test_create_existing_item():
+    response = client.post(
+        "/items/",
+        headers={"X-Token": "coneofsilence"},
+        json={
+            "id": "foo",
+            "title": "The Foo ID Stealers",
+            "description": "There goes my stealer",
+        },
+    )
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Item already exists"}
+```
+
+每当你需要客户端在请求中传递信息，但你不知道如何传递时，你可以通过搜索（谷歌）如何用 `httpx` 做，或者是用 `requests` 做，毕竟HTTPX的设计是基于Requests的设计的。
+
+接着只需在测试中同样操作。
+
+示例：
+
+- 传一个*路径* 或*查询* 参数，添加到URL上。
+- 传一个JSON体，传一个Python对象(例如一个`dict`)到参数 `json`。
+- 如果你需要发送 *Form Data* 而不是 JSON，使用 `data` 参数。
+- 要发送 *headers*，传 `dict` 给 `headers` 参数。
+- 对于 *cookies*，传 `dict` 给 `cookies` 参数。
+
+关于如何传数据给后端的更多信息（使用 `httpx` 或 `TestClient`），请查阅 [HTTPX 文档](https://www.python-httpx.org/)。
+
+
+
+### 运行起来
+
+之后，你只需要安装 `pytest`。
+
+确保你创建并激活一个[虚拟环境](https://fastapi.tiangolo.com/zh/virtual-environments/)，然后再安装，例如：
+
+```bash
+$ pip install pytest
+```
+
+他会自动检测文件和测试，执行测试，然后向你报告结果。
+
+执行测试：
+
+```bash
+$ pytest
+
+================ test session starts ================
+platform linux -- Python 3.6.9, pytest-5.3.5, py-1.8.1, pluggy-0.13.1
+rootdir: /home/user/code/superawesome-cli/app
+plugins: forked-1.1.3, xdist-1.31.0, cov-2.8.1
+collected 6 items
+
+████████████████████████████████████████ 100%
+
+test_main.py ......                            [100%]
+
+================= 1 passed in 0.03s =================
+
+```
+
+
+
+
+
+
+
+---
+
+---
+
+## 调试
+
+你可以在编辑器中连接调试器，例如使用 Visual Studio Code 或 PyCharm。
+
+
+
+### 调用unicorn
+
+在你的 FastAPI 应用中直接导入 `uvicorn` 并运行：
+
+[Python 3.10+](https://fastapi.tiangolo.com/zh/tutorial/debugging/#__tabbed_1_1)
+
+```python
+import uvicorn
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+def root():
+    a = "a"
+    b = "b" + a
+    return {"hello world": b}
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+
+
+#### 关于 `__name__ == "__main__"`
+
+`__name__ == "__main__"` 的主要目的是使用以下代码调用文件时执行一些代码：
+
+```bash
+$ python myapp.py
+```
+
+而当其它文件导入它时并不会被调用，像这样：
+
+```python
+from myapp import app
+```
+
+
+
+#### 更多细节
+
+假设你的文件命名为 `myapp.py`。
+
+如果你这样运行：
+
+```python
+$ python  myapp.py
+```
+
+那么文件中由 Python 自动创建的内部变量 `__name__`，会将字符串 `"__main__"` 作为值。
+
+所以，这一段：
+
+```bash
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+会运行。
+
+------
+
+如果你是导入这个模块（文件）就不会这样。
+
+因此，如果你的另一个文件 `importer.py` 像这样：
+
+```python
+from myapp import app
+
+# 其他一些代码
+```
+
+在这种情况下，`myapp.py` 内部的自动变量不会有值为 `"__main__"` 的变量 `__name__`。
+
+所以，这一行：
+
+```bash
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+```
+
+不会被执行。
+
+
+
+### 使用你的调试器运行代码
+
+由于是从代码直接运行的 Uvicorn 服务器，所以你可以从调试器直接调用 Python 程序（你的 FastAPI 应用）。
+
+------
+
+例如，你可以在 Visual Studio Code 中：
+
+- 进入到「调试」面板。
+- 「添加配置...」。
+- 选中「Python」
+- 运行「Python：当前文件（集成终端）」选项的调试器。
+
+然后它会使用你的 **FastAPI** 代码开启服务器，停在断点处，等等。
+
+看起来可能是这样：
+
+<img src="https://raw.githubusercontent.com/Otrname/my-images/main/img/%E6%88%AA%E5%B1%8F2026-06-25%2021.03.09.png" alt="截屏2026-06-25 21.03.09" style="zoom:80%;" />
+
+
